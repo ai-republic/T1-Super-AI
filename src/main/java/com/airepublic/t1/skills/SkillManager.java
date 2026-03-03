@@ -1,6 +1,5 @@
 package com.airepublic.t1.skills;
 
-import com.airepublic.t1.plugins.Skill;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

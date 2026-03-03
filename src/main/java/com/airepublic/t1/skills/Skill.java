@@ -1,4 +1,4 @@
-package com.airepublic.t1.plugins;
+package com.airepublic.t1.skills;
 
 import lombok.Data;
 
