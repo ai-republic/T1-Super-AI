@@ -1,0 +1,560 @@
+package com.airepublic.t1.api.controller;
+
+import com.airepublic.t1.agent.Agent;
+import com.airepublic.t1.agent.AgentManager;
+import com.airepublic.t1.agent.AgentOrchestrator;
+import com.airepublic.t1.api.dto.*;
+import com.airepublic.t1.config.AgentConfigService;
+import com.airepublic.t1.model.IndividualAgentConfig;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@Slf4j
+@RestController
+@RequestMapping("/api/v1/agents")
+@RequiredArgsConstructor
+@Tag(name = "Agent Management", description = "APIs for managing AI agents - create, read, update, delete, and switch between agents")
+public class AgentController {
+    private final AgentManager agentManager;
+    private final AgentOrchestrator orchestrator;
+    private final AgentConfigService agentConfigService;
+
+    @Operation(
+        summary = "List all agents",
+        description = "Retrieves a list of all available agents with their current status, conversation count, and metadata. The current active agent is marked with isCurrentAgent=true."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Successfully retrieved agent list",
+            content = @Content(schema = @Schema(implementation = AgentInfo.class))
+        ),
+        @ApiResponse(
+            responseCode = "500",
+            description = "Internal server error",
+            content = @Content(schema = @Schema(implementation = com.airepublic.t1.api.dto.ApiResponse.class))
+        )
+    })
+    @GetMapping
+    public ResponseEntity<com.airepublic.t1.api.dto.ApiResponse<List<AgentInfo>>> listAgents() {
+        try {
+            String currentAgentName = agentManager.getCurrentAgentName();
+            List<AgentInfo> agents = agentManager.listAgents().stream()
+                    .map(agent -> {
+                        IndividualAgentConfig config = agent.getConfig();
+                        return AgentInfo.builder()
+                                .name(agent.getName())
+                                .role(config != null ? config.getRole() : null)
+                                .purpose(null) // Will be loaded from CHARACTER.md if needed
+                                .status(agent.getStatus())
+                                .createdAt(agent.getCreatedAt())
+                                .lastActiveAt(agent.getLastActiveAt())
+                                .conversationCount(agent.getConversationHistory().size())
+                                .isCurrentAgent(agent.getName().equals(currentAgentName))
+                                .build();
+                    })
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(com.airepublic.t1.api.dto.ApiResponse.success(agents));
+
+        } catch (Exception e) {
+            log.error("Error listing agents", e);
+            return ResponseEntity.internalServerError()
+                    .body(com.airepublic.t1.api.dto.ApiResponse.error("Error listing agents: " + e.getMessage()));
+        }
+    }
+
+    @Operation(
+        summary = "Create a new agent",
+        description = """
+            Creates a new agent instance with full CHARACTER.md profile and configuration.
+
+            The agent will fork the current agent's conversation history and run in its own thread.
+            All provided fields will be used to create:
+            - Agent configuration (provider, model, context)
+            - CHARACTER.md file (role, purpose, personality, communication style, specialties, constraints)
+            - USAGE.md file (usage guide)
+
+            Only the 'name' field is required. All other fields are optional and will use defaults if not provided.
+            The agent is automatically persisted to disk at ~/.t1-super-ai/agents/{name}/
+            """
+    )
+    @ApiResponses(value = {
+        @ApiResponse(
+            responseCode = "200",
+            description = "Agent created successfully",
+            content = @Content(schema = @Schema(implementation = AgentInfo.class))
+        ),
+        @ApiResponse(
+            responseCode = "400",
+            description = "Bad request - invalid agent name or agent already exists",
+            content = @Content(schema = @Schema(implementation = com.airepublic.t1.api.dto.ApiResponse.class))
+        ),
+        @ApiResponse(
+            responseCode = "500",
+            description = "Internal server error",
+            content = @Content(schema = @Schema(implementation = com.airepublic.t1.api.dto.ApiResponse.class))
+        )
+    })
+    @PostMapping
+    public ResponseEntity<com.airepublic.t1.api.dto.ApiResponse<AgentInfo>> createAgent(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                description = """
+                    Agent creation request with full CHARACTER.md profile.
+                    Required: name
+                    Optional: role, purpose, personality, communicationStyle, specialties, constraints, context, provider, model
+                    """,
+                required = true,
+                content = @Content(schema = @Schema(implementation = CreateAgentRequest.class))
+            )
+            @RequestBody CreateAgentRequest request) {
+        try {
+            if (request.getName() == null || request.getName().trim().isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(com.airepublic.t1.api.dto.ApiResponse.error("Agent name is required"));
+            }
+
+            if (agentManager.hasAgent(request.getName())) {
+                return ResponseEntity.badRequest()
+                        .body(com.airepublic.t1.api.dto.ApiResponse.error("Agent '" + request.getName() + "' already exists"));
+            }
+
+            // Create agent configuration if any config fields are provided
+            IndividualAgentConfig config = null;
+            if (request.getProvider() != null || request.getModel() != null || request.getContext() != null) {
+                config = new IndividualAgentConfig();
+                config.setName(request.getName());
+                config.setRole(request.getRole() != null ? request.getRole() : "AI Assistant");
+                config.setContext(request.getContext() != null ? request.getContext() : "General purpose AI assistant");
+                config.setProvider(request.getProvider());
+                config.setModel(request.getModel());
+            }
+
+            // Create the agent
+            Agent agent = agentManager.createAgent(request.getName(), orchestrator, config);
+
+            // Create agent folder
+            agentConfigService.createAgentFolder(request.getName());
+
+            // Create CHARACTER.md with provided information
+            Map<String, String> hatchData = new HashMap<>();
+            hatchData.put("agent_role", request.getRole() != null ? request.getRole() : "AI Assistant");
+            hatchData.put("agent_purpose", request.getPurpose() != null ? request.getPurpose() : "General purpose assistance");
+            hatchData.put("agent_personality", request.getPersonality() != null ? request.getPersonality() : "Professional and helpful");
+            hatchData.put("communication_style", request.getCommunicationStyle() != null ? request.getCommunicationStyle() : "Clear and concise");
+            hatchData.put("specialties", request.getSpecialties() != null ? request.getSpecialties() : "General AI assistance");
+            hatchData.put("constraints", request.getConstraints() != null ? request.getConstraints() : "None specified");
+
+            agentConfigService.createCharacterMd(request.getName(), hatchData);
+
+            // If config was created, save it and create USAGE.md
+            if (config != null) {
+                agentConfigService.saveAgentConfig(config);
+                agentConfigService.createUsageMd(request.getName(), config);
+            }
+
+            AgentInfo agentInfo = AgentInfo.builder()
+                    .name(agent.getName())
+                    .status(agent.getStatus())
+                    .createdAt(agent.getCreatedAt())
+                    .lastActiveAt(agent.getLastActiveAt())
+                    .conversationCount(agent.getConversationHistory().size())
+                    .isCurrentAgent(false)
+                    .build();
+
+            return ResponseEntity.ok(com.airepublic.t1.api.dto.ApiResponse.success(
+                    "Agent '" + request.getName() + "' created successfully with CHARACTER.md profile", agentInfo));
+
+        } catch (Exception e) {
+            log.error("Error creating agent", e);
+            return ResponseEntity.internalServerError()
+                    .body(com.airepublic.t1.api.dto.ApiResponse.error("Error creating agent: " + e.getMessage()));
+        }
+    }
+
+    @Operation(
+        summary = "Get agent details",
+        description = "Retrieves detailed information about a specific agent including full CHARACTER.md profile"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Agent found"),
+        @ApiResponse(responseCode = "404", description = "Agent not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @GetMapping("/{name}")
+    public ResponseEntity<com.airepublic.t1.api.dto.ApiResponse<AgentDetails>> getAgent(
+            @Parameter(description = "Name of the agent to retrieve", required = true)
+            @PathVariable String name) {
+        try {
+            if (!agentManager.hasAgent(name)) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Agent agent = agentManager.getAgent(name);
+            String currentAgentName = agentManager.getCurrentAgentName();
+            IndividualAgentConfig config = agent.getConfig();
+
+            // Try to read CHARACTER.md to get additional details
+            String characterMd = null;
+            String purpose = null;
+            String personality = null;
+            String communicationStyle = null;
+            String specialties = null;
+            String constraints = null;
+
+            try {
+                characterMd = agentConfigService.readCharacterMd(name);
+                if (characterMd != null) {
+                    // Parse CHARACTER.md to extract fields
+                    purpose = extractFromCharacterMd(characterMd, "Purpose");
+                    personality = extractFromCharacterMd(characterMd, "Personality");
+                    communicationStyle = extractFromCharacterMd(characterMd, "Communication Style");
+                    specialties = extractFromCharacterMd(characterMd, "Specialties");
+                    constraints = extractFromCharacterMd(characterMd, "Constraints");
+                }
+            } catch (Exception e) {
+                log.warn("Could not read CHARACTER.md for agent: {}", name, e);
+            }
+
+            AgentDetails agentDetails = AgentDetails.builder()
+                    .name(agent.getName())
+                    .status(agent.getStatus())
+                    .createdAt(agent.getCreatedAt())
+                    .lastActiveAt(agent.getLastActiveAt())
+                    .conversationCount(agent.getConversationHistory().size())
+                    .isCurrentAgent(agent.getName().equals(currentAgentName))
+                    .role(config != null ? config.getRole() : null)
+                    .purpose(purpose)
+                    .personality(personality)
+                    .communicationStyle(communicationStyle)
+                    .specialties(specialties)
+                    .constraints(constraints)
+                    .context(config != null ? config.getContext() : null)
+                    .provider(config != null ? config.getProvider() : null)
+                    .model(config != null ? config.getModel() : null)
+                    .build();
+
+            return ResponseEntity.ok(com.airepublic.t1.api.dto.ApiResponse.success(agentDetails));
+
+        } catch (Exception e) {
+            log.error("Error retrieving agent", e);
+            return ResponseEntity.internalServerError()
+                    .body(com.airepublic.t1.api.dto.ApiResponse.error("Error retrieving agent: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Helper method to extract a field value from CHARACTER.md
+     */
+    private String extractFromCharacterMd(String characterMd, String fieldName) {
+        if (characterMd == null) return null;
+
+        String marker = "## " + fieldName;
+        int startIdx = characterMd.indexOf(marker);
+        if (startIdx == -1) return null;
+
+        startIdx = characterMd.indexOf("\n", startIdx) + 1;
+        int endIdx = characterMd.indexOf("\n##", startIdx);
+        if (endIdx == -1) {
+            endIdx = characterMd.indexOf("\n\n##", startIdx);
+        }
+        if (endIdx == -1) {
+            endIdx = characterMd.length();
+        }
+
+        String value = characterMd.substring(startIdx, endIdx).trim();
+        // Remove markdown formatting
+        value = value.replace("- **Name**:", "")
+                     .replace("- **Role**:", "")
+                     .replace("- **Purpose**:", "")
+                     .trim();
+
+        // If it's a list item, get the content after the colon
+        if (value.contains(":")) {
+            int colonIdx = value.lastIndexOf(":");
+            value = value.substring(colonIdx + 1).trim();
+        }
+
+        return value.isEmpty() ? null : value;
+    }
+
+    @Operation(
+        summary = "Delete an agent",
+        description = "Removes an agent from the system. The master agent cannot be deleted. If the deleted agent is currently active, the system switches back to the master agent."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Agent deleted successfully"),
+        @ApiResponse(responseCode = "400", description = "Bad request - cannot delete master agent"),
+        @ApiResponse(responseCode = "404", description = "Agent not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @DeleteMapping("/{name}")
+    public ResponseEntity<com.airepublic.t1.api.dto.ApiResponse<Void>> removeAgent(
+            @Parameter(description = "Name of the agent to delete", required = true)
+            @PathVariable String name) {
+        try {
+            if (!agentManager.hasAgent(name)) {
+                return ResponseEntity.notFound().build();
+            }
+
+            boolean removed = agentManager.removeAgent(name);
+
+            if (removed) {
+                return ResponseEntity.ok(com.airepublic.t1.api.dto.ApiResponse.success(
+                        "Agent '" + name + "' removed successfully", null));
+            } else {
+                return ResponseEntity.badRequest()
+                        .body(com.airepublic.t1.api.dto.ApiResponse.error("Failed to remove agent"));
+            }
+
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest()
+                    .body(com.airepublic.t1.api.dto.ApiResponse.error(e.getMessage()));
+        } catch (Exception e) {
+            log.error("Error removing agent", e);
+            return ResponseEntity.internalServerError()
+                    .body(com.airepublic.t1.api.dto.ApiResponse.error("Error removing agent: " + e.getMessage()));
+        }
+    }
+
+    @Operation(
+        summary = "Switch current agent",
+        description = "Changes the current active agent. All subsequent operations will use this agent's context until switched again."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Successfully switched to the agent"),
+        @ApiResponse(responseCode = "400", description = "Bad request - invalid agent name"),
+        @ApiResponse(responseCode = "404", description = "Agent not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @PutMapping("/current")
+    public ResponseEntity<com.airepublic.t1.api.dto.ApiResponse<Void>> switchAgent(
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                description = "Request containing the agent name to switch to",
+                required = true,
+                content = @Content(schema = @Schema(implementation = SwitchAgentRequest.class))
+            )
+            @RequestBody SwitchAgentRequest request) {
+        try {
+            if (request.getAgentName() == null || request.getAgentName().trim().isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(com.airepublic.t1.api.dto.ApiResponse.error("Agent name is required"));
+            }
+
+            if (!agentManager.hasAgent(request.getAgentName())) {
+                return ResponseEntity.notFound().build();
+            }
+
+            if (agentManager.getCurrentAgentName().equals(request.getAgentName())) {
+                return ResponseEntity.ok(com.airepublic.t1.api.dto.ApiResponse.success(
+                        "Already using agent: " + request.getAgentName(), null));
+            }
+
+            agentManager.switchToAgent(request.getAgentName());
+
+            return ResponseEntity.ok(com.airepublic.t1.api.dto.ApiResponse.success(
+                    "Switched to agent: " + request.getAgentName(), null));
+
+        } catch (Exception e) {
+            log.error("Error switching agent", e);
+            return ResponseEntity.internalServerError()
+                    .body(com.airepublic.t1.api.dto.ApiResponse.error("Error switching agent: " + e.getMessage()));
+        }
+    }
+
+    @Operation(
+        summary = "Get current agent",
+        description = "Retrieves information about the currently active agent"
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Successfully retrieved current agent"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @GetMapping("/current")
+    public ResponseEntity<com.airepublic.t1.api.dto.ApiResponse<AgentInfo>> getCurrentAgent() {
+        try {
+            String currentAgentName = agentManager.getCurrentAgentName();
+            Agent agent = agentManager.listAgents().stream()
+                    .filter(a -> a.getName().equals(currentAgentName))
+                    .findFirst()
+                    .orElseThrow();
+
+            AgentInfo agentInfo = AgentInfo.builder()
+                    .name(agent.getName())
+                    .status(agent.getStatus())
+                    .createdAt(agent.getCreatedAt())
+                    .lastActiveAt(agent.getLastActiveAt())
+                    .conversationCount(agent.getConversationHistory().size())
+                    .isCurrentAgent(true)
+                    .build();
+
+            return ResponseEntity.ok(com.airepublic.t1.api.dto.ApiResponse.success(agentInfo));
+
+        } catch (Exception e) {
+            log.error("Error retrieving current agent", e);
+            return ResponseEntity.internalServerError()
+                    .body(com.airepublic.t1.api.dto.ApiResponse.error("Error retrieving current agent: " + e.getMessage()));
+        }
+    }
+
+    @Operation(
+        summary = "Update agent configuration",
+        description = "Updates an agent's configuration including role, context, LLM provider, and model. All fields are optional - only provided fields will be updated. Changes are persisted to disk."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Agent configuration updated successfully"),
+        @ApiResponse(responseCode = "404", description = "Agent not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @PutMapping("/{name}")
+    public ResponseEntity<com.airepublic.t1.api.dto.ApiResponse<AgentInfo>> updateAgent(
+            @Parameter(description = "Name of the agent to update", required = true)
+            @PathVariable String name,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                description = "Agent configuration update request. All fields are optional.",
+                required = true,
+                content = @Content(schema = @Schema(implementation = UpdateAgentRequest.class))
+            )
+            @RequestBody UpdateAgentRequest request) {
+        try {
+            if (!agentManager.hasAgent(name)) {
+                return ResponseEntity.notFound().build();
+            }
+
+            Agent agent = agentManager.getAgent(name);
+            IndividualAgentConfig config = agent.getConfig();
+
+            // If no config exists, create one
+            if (config == null) {
+                config = new IndividualAgentConfig();
+                config.setName(name);
+            }
+
+            // Update fields if provided
+            if (request.getRole() != null) {
+                config.setRole(request.getRole());
+            }
+            if (request.getContext() != null) {
+                config.setContext(request.getContext());
+            }
+            if (request.getProvider() != null) {
+                config.setProvider(request.getProvider());
+            }
+            if (request.getModel() != null) {
+                config.setModel(request.getModel());
+            }
+
+            // Update the agent's configuration in memory
+            Agent updatedAgent = agentManager.updateAgentConfig(name, config);
+
+            // Persist to disk
+            agentConfigService.saveAgentConfig(config);
+
+            // Build response
+            String currentAgentName = agentManager.getCurrentAgentName();
+            AgentInfo agentInfo = AgentInfo.builder()
+                    .name(updatedAgent.getName())
+                    .status(updatedAgent.getStatus())
+                    .createdAt(updatedAgent.getCreatedAt())
+                    .lastActiveAt(updatedAgent.getLastActiveAt())
+                    .conversationCount(updatedAgent.getConversationHistory().size())
+                    .isCurrentAgent(updatedAgent.getName().equals(currentAgentName))
+                    .build();
+
+            return ResponseEntity.ok(com.airepublic.t1.api.dto.ApiResponse.success(
+                    "Agent '" + name + "' configuration updated successfully", agentInfo));
+
+        } catch (Exception e) {
+            log.error("Error updating agent", e);
+            return ResponseEntity.internalServerError()
+                    .body(com.airepublic.t1.api.dto.ApiResponse.error("Error updating agent: " + e.getMessage()));
+        }
+    }
+
+    @Operation(
+        summary = "Send message to agent",
+        description = "Sends a message to a specific agent and retrieves the response. The agent processes the message using its configured LLM provider and returns the response with metadata including response time and model used."
+    )
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Message processed successfully"),
+        @ApiResponse(responseCode = "400", description = "Bad request - message is required"),
+        @ApiResponse(responseCode = "404", description = "Agent not found"),
+        @ApiResponse(responseCode = "500", description = "Internal server error")
+    })
+    @Tag(name = "Agent Messaging")
+    @PostMapping("/{name}/message")
+    public ResponseEntity<com.airepublic.t1.api.dto.ApiResponse<AgentMessageResponse>> sendMessageToAgent(
+            @Parameter(description = "Name of the agent to send message to", required = true)
+            @PathVariable String name,
+            @io.swagger.v3.oas.annotations.parameters.RequestBody(
+                description = "Message request containing the prompt to send to the agent",
+                required = true,
+                content = @Content(schema = @Schema(implementation = AgentMessageRequest.class))
+            )
+            @RequestBody AgentMessageRequest request) {
+        try {
+            if (!agentManager.hasAgent(name)) {
+                return ResponseEntity.notFound().build();
+            }
+
+            if (request.getMessage() == null || request.getMessage().trim().isEmpty()) {
+                return ResponseEntity.badRequest()
+                        .body(com.airepublic.t1.api.dto.ApiResponse.error("Message is required"));
+            }
+
+            // Get the agent
+            Agent agent = agentManager.getAgent(name);
+
+            // Save current agent and switch to target agent
+            String previousAgent = agentManager.getCurrentAgentName();
+            boolean needToSwitch = !previousAgent.equals(name);
+
+            if (needToSwitch) {
+                agentManager.switchToAgent(name);
+            }
+
+            // Process message through orchestrator
+            long startTime = System.currentTimeMillis();
+            String response = orchestrator.processMessage(request.getMessage());
+            long endTime = System.currentTimeMillis();
+
+            // Switch back if needed
+            if (needToSwitch) {
+                agentManager.switchToAgent(previousAgent);
+            }
+
+            // Build response
+            AgentMessageResponse messageResponse = AgentMessageResponse.builder()
+                    .response(response)
+                    .agentName(name)
+                    .modelUsed(agent.getConfig() != null ?
+                               agent.getConfig().getProvider() + "/" + agent.getConfig().getModel() :
+                               "default")
+                    .timestamp(LocalDateTime.now())
+                    .responseTimeMs(endTime - startTime)
+                    .build();
+
+            return ResponseEntity.ok(com.airepublic.t1.api.dto.ApiResponse.success(messageResponse));
+
+        } catch (Exception e) {
+            log.error("Error processing message for agent: {}", name, e);
+            return ResponseEntity.internalServerError()
+                    .body(com.airepublic.t1.api.dto.ApiResponse.error("Error processing message: " + e.getMessage()));
+        }
+    }
+}
