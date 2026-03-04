@@ -24,33 +24,23 @@ public class SessionContextManager {
 
     /**
      * Build initial context for a new session
-     * Includes CHARACTER.md and USAGE.md as system context
-     * Optimized to send concise key information instead of full files
+     * Loads USER.md as system context
+     * Note: CHARACTER.md files are agent-specific and loaded via buildInitialContext(agentName)
      */
     public String buildInitialContext() {
         final StringBuilder context = new StringBuilder();
 
-        // Add CHARACTER.md if exists - extract key information only
-        final String characterContent = workspaceInitializer.readCharacterMd();
-        if (characterContent != null) {
-            context.append("# Agent Character Profile\n\n");
-
-            // Extract key fields from CHARACTER.md instead of sending whole file
-            final String extractedInfo = extractCharacterInfo(characterContent);
-            context.append(extractedInfo);
+        // Add USER.md if exists - user information applies to all agents
+        final String userContent = workspaceInitializer.readUserMd();
+        if (userContent != null) {
+            context.append("# User Profile\n\n");
+            context.append(userContent);
             context.append("\n");
-
-            log.info("📋 Loaded CHARACTER.md as session context (optimized)");
+            log.info("📋 Loaded USER.md as session context");
         } else {
-            log.warn("⚠️ CHARACTER.md not found - agent not configured");
-        }
-
-        // Skip USAGE.md in system context - it's mainly for user reference
-        // The agent can read it if needed via read_file tool
-
-        if (context.length() == 0) {
+            log.warn("⚠️ USER.md not found - user not configured");
             context.append("# Session Context\n\n");
-            context.append("No character profile found. ");
+            context.append("No user profile found. ");
             context.append("This may be the first run - consider running the HATCH setup process.\n");
         }
 
@@ -58,56 +48,15 @@ public class SessionContextManager {
     }
 
     /**
-     * Extract key information from CHARACTER.md to minimize token usage
-     */
-    private String extractCharacterInfo(final String characterContent) {
-        final StringBuilder info = new StringBuilder();
-
-        // Extract lines with key information
-        final String[] lines = characterContent.split("\n");
-        String currentSection = "";
-
-        for (String line : lines) {
-            line = line.trim();
-
-            // Track sections
-            if (line.startsWith("## ")) {
-                currentSection = line;
-                continue;
-            }
-
-            // Extract key fields
-            if (line.startsWith("**Name:**")) {
-                info.append("User Name: ").append(line.substring(9).trim()).append("\n");
-            } else if (line.startsWith("**Pronouns:**")) {
-                info.append("User Pronouns: ").append(line.substring(13).trim()).append("\n");
-            } else if (line.startsWith("**Work Focus:**")) {
-                info.append("User Work Focus: ").append(line.substring(15).trim()).append("\n");
-            } else if (line.startsWith("**Agent Name:**")) {
-                info.append("Agent Name: ").append(line.substring(15).trim()).append("\n");
-            } else if (line.startsWith("**Purpose:**")) {
-                info.append("Agent Purpose: ").append(line.substring(12).trim()).append("\n");
-            } else if (line.startsWith("**Style:**")) {
-                info.append("Communication Style: ").append(line.substring(10).trim()).append("\n");
-            } else if (line.startsWith("**Personality:**")) {
-                info.append("Personality: ").append(line.substring(16).trim()).append("\n");
-            } else if (line.startsWith("**Emoji Preference:**")) {
-                info.append("Emoji Usage: ").append(line.substring(21).trim()).append("\n");
-            }
-        }
-
-        return info.toString();
-    }
-
-    /**
      * Build context messages for LLM
+     * Note: CHARACTER.md is agent-specific, use buildContextMessages(agentName) instead
      */
     public List<SessionMessage> buildContextMessages() {
         final List<SessionMessage> messages = new ArrayList<>();
 
-        final String characterContent = workspaceInitializer.readCharacterMd();
-        if (characterContent != null) {
-            messages.add(new SessionMessage("system", "CHARACTER_PROFILE", characterContent));
+        final String userContent = workspaceInitializer.readUserMd();
+        if (userContent != null) {
+            messages.add(new SessionMessage("system", "USER_PROFILE", userContent));
         }
 
         final String usageContent = workspaceInitializer.readUsageMd();
@@ -120,15 +69,16 @@ public class SessionContextManager {
 
     /**
      * Get summary of loaded context
+     * Note: CHARACTER.md is agent-specific, use getContextSummary(agentName) instead
      */
     public String getContextSummary() {
         final StringBuilder summary = new StringBuilder();
         summary.append("Session Context Loaded:\n");
 
-        if (workspaceInitializer.readCharacterMd() != null) {
-            summary.append("✅ CHARACTER.md - Agent personality and preferences\n");
+        if (workspaceInitializer.readUserMd() != null) {
+            summary.append("✅ USER.md - User profile and preferences\n");
         } else {
-            summary.append("❌ CHARACTER.md - Not configured (run HATCH setup)\n");
+            summary.append("❌ USER.md - Not configured (run HATCH setup)\n");
         }
 
         if (workspaceInitializer.readUsageMd() != null) {
@@ -149,6 +99,17 @@ public class SessionContextManager {
 
         // Add clear agent identity statement
         context.append(String.format("YOU ARE: %s\n\n", agentName));
+
+        // Add USER.md if exists - user information applies to all agents
+        final String userContent = workspaceInitializer.readUserMd();
+        if (userContent != null) {
+            context.append("# User Profile\n\n");
+            context.append(userContent);
+            context.append("\n");
+            log.info("📋 Loaded USER.md for agent '{}' as session context", agentName);
+        } else {
+            log.warn("⚠️ USER.md not found for agent '{}'", agentName);
+        }
 
         // Try to load agent-specific CHARACTER.md
         try {

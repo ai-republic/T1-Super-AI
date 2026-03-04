@@ -61,11 +61,7 @@ public class AgentDetails {
             example = "Does not write production code without tests. Always suggests security best practices.")
     private String constraints;
 
-    // Configuration fields
-    @Schema(description = "Context or system prompt for the agent",
-            example = "You are an expert Java developer with 15+ years of experience in enterprise applications.")
-    private String context;
-
+    // LLM Configuration fields
     @Schema(description = "LLM provider configured for this agent",
             example = "OPENAI",
             allowableValues = {"OPENAI", "ANTHROPIC", "OLLAMA"})

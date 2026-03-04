@@ -4,8 +4,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 
 import org.springframework.stereotype.Component;
 
@@ -30,7 +28,6 @@ public class WorkspaceInitializer {
     public boolean initializeWorkspace() {
         try {
             final Path workspacePath = Paths.get(WORKSPACE_DIR);
-            final boolean isFirstRun = !Files.exists(workspacePath);
 
             // Create directories
             Files.createDirectories(workspacePath);
@@ -39,16 +36,16 @@ public class WorkspaceInitializer {
             Files.createDirectories(Paths.get(WORKSPACE_DIR, "mcp-servers"));
             Files.createDirectories(Paths.get(WORKSPACE_DIR, "skills"));
 
-            // Check if CHARACTER.md exists - if not, this is first run
-            final Path characterPath = Paths.get(WORKSPACE_DIR, "CHARACTER.md");
-            final boolean needsHatching = !Files.exists(characterPath);
+            // Check if USER.md exists - if not, this is first run
+            final Path userPath = Paths.get(WORKSPACE_DIR, "USER.md");
+            final boolean needsHatching = !Files.exists(userPath);
 
             if (needsHatching) {
                 log.info("🥚 First run detected - creating instructional files");
                 createInstructionalFiles();
                 return true; // First run, needs HATCH
             } else {
-                log.info("✅ Workspace initialized - CHARACTER.md exists");
+                log.info("✅ Workspace initialized - USER.md exists");
                 // Ensure other docs exist
                 ensureDocumentationFiles();
                 return false; // Already hatched
@@ -65,7 +62,6 @@ public class WorkspaceInitializer {
      */
     private void createInstructionalFiles() throws IOException {
         createHatchMd();
-        createCharacterTemplate();
         createUsageMd();
         createReadmeMd();
         createQuickReferenceMd();
@@ -105,15 +101,6 @@ public class WorkspaceInitializer {
         final String content = getHatchContent();
         Files.writeString(hatchPath, content);
         log.info("✨ Created HATCH.md - your setup guide");
-    }
-
-    /**
-     * Create CHARACTER.md.template
-     */
-    private void createCharacterTemplate() throws IOException {
-        final String content = getCharacterTemplateContent();
-        Files.writeString(Paths.get(WORKSPACE_DIR, "CHARACTER.md.template"), content);
-        log.info("Created CHARACTER.md.template");
     }
 
     /**
@@ -644,6 +631,7 @@ public class WorkspaceInitializer {
                 "## Directory Structure\n\n" +
                 "```\n" +
                 "~/.t1-super-ai/\n" +
+                "├── agents/             # Agent configurations (each has CHARACTER.md)\n" +
                 "├── tools/              # Tool configurations\n" +
                 "├── plugins/            # Plugin configurations\n" +
                 "├── mcp-servers/        # External MCP server configurations\n" +
@@ -651,10 +639,11 @@ public class WorkspaceInitializer {
                 "```\n\n" +
                 "## Documentation Files\n\n" +
                 "- HATCH.md - Initial setup guide (delete after setup)\n" +
-                "- CHARACTER.md - Your agent's personality profile\n" +
+                "- USER.md - Your user profile and preferences\n" +
                 "- USAGE.md - Comprehensive usage guide\n" +
                 "- QUICK_REFERENCE.md - Quick command reference\n" +
-                "- CONFIGURATION_GUIDE.md - Configuration examples\n\n" +
+                "- CONFIGURATION_GUIDE.md - Configuration examples\n" +
+                "- agents/{name}/CHARACTER.md - Agent-specific personality profiles\n\n" +
                 "See individual files for details.\n";
         Files.writeString(targetFile, content);
         log.info("Created README.md");
@@ -739,62 +728,16 @@ public class WorkspaceInitializer {
     }
 
     /**
-     * Create CHARACTER.md from template with filled values
+     * Read USER.md for session context
      */
-    public void createCharacterMd(
-            final String userName,
-            final String userPronouns,
-            final String userFocus,
-            final String agentName,
-            final String agentPurpose,
-            final String communicationStyle,
-            final String personalityTraits,
-            final String emojiPreference
-            ) throws IOException {
-        final String template = Files.readString(Paths.get(WORKSPACE_DIR, "CHARACTER.md.template"));
-
-        final String content = template
-                .replace("{{TIMESTAMP}}", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
-                .replace("{{USER_NAME}}", userName)
-                .replace("{{USER_PRONOUNS}}", userPronouns)
-                .replace("{{USER_FOCUS}}", userFocus)
-                .replace("{{USER_TIMEZONE}}", System.getProperty("user.timezone"))
-                .replace("{{AGENT_NAME}}", agentName)
-                .replace("{{AGENT_PURPOSE}}", agentPurpose)
-                .replace("{{COMMUNICATION_STYLE}}", communicationStyle)
-                .replace("{{PERSONALITY_TRAITS}}", personalityTraits)
-                .replace("{{EMOJI_PREFERENCE}}", emojiPreference)
-                .replace("{{LANGUAGE_PREFS}}", "Not specified")
-                .replace("{{FRAMEWORK_PREFS}}", "Not specified")
-                .replace("{{COMMENT_STYLE}}", "Standard")
-                .replace("{{DOC_LEVEL}}", "Standard")
-                .replace("{{PROBLEM_SOLVING_APPROACH}}", "Balanced")
-                .replace("{{CREATION_DATE}}", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE))
-                .replace("{{TOOL_COUNT}}", "0")
-                .replace("{{SKILL_COUNT}}", "0")
-                .replace("{{SERVER_COUNT}}", "0")
-                .replace("{{CHANGELOG}}", "_Initial setup_")
-                .replace("{{PERSONAL_NOTES}}", "");
-
-        Files.writeString(Paths.get(WORKSPACE_DIR, "CHARACTER.md"), content);
-        log.info("✅ Created CHARACTER.md with agent profile");
-
-        // Delete HATCH.md to mark setup complete
-        Files.deleteIfExists(Paths.get(WORKSPACE_DIR, "HATCH.md"));
-        log.info("🎉 Setup complete - HATCH.md removed");
-    }
-
-    /**
-     * Read CHARACTER.md for session context
-     */
-    public String readCharacterMd() {
+    public String readUserMd() {
         try {
-            final Path characterPath = Paths.get(WORKSPACE_DIR, "CHARACTER.md");
-            if (Files.exists(characterPath)) {
-                return Files.readString(characterPath);
+            final Path userPath = Paths.get(WORKSPACE_DIR, "USER.md");
+            if (Files.exists(userPath)) {
+                return Files.readString(userPath);
             }
         } catch (final IOException e) {
-            log.error("Error reading CHARACTER.md", e);
+            log.error("Error reading USER.md", e);
         }
         return null;
     }
@@ -830,10 +773,10 @@ public class WorkspaceInitializer {
     }
 
     /**
-     * Check if hatching is needed (CHARACTER.md doesn't exist)
+     * Check if hatching is needed (USER.md doesn't exist)
      */
     public boolean needsHatching() {
-        return !Files.exists(Paths.get(WORKSPACE_DIR, "CHARACTER.md"));
+        return !Files.exists(Paths.get(WORKSPACE_DIR, "USER.md"));
     }
 
     // Template content methods (these would normally read from resources)
@@ -850,7 +793,7 @@ public class WorkspaceInitializer {
                 - How I should communicate with you
                 - What tools and capabilities you need
 
-                This will only take a few minutes, and you can always adjust these settings later by editing `~/.t1-super-ai/CHARACTER.md`.
+                This will only take a few minutes, and you can always adjust these settings later by editing agent files in `~/.t1-super-ai/agents/{agent-name}/`.
 
                 ---
 
@@ -915,48 +858,61 @@ public class WorkspaceInitializer {
                 ## Ready to Begin?
 
                 Once you start chatting with me, I'll guide you through these questions naturally.
-                After we're done, I'll create your `CHARACTER.md` file with your preferences.
+                After we're done, I'll create your agent profile with your preferences.
 
                 **Let's get started!** 🚀
 
                 ---
 
-                _This file will be automatically deleted after your CHARACTER.md is created._
+                _This file will be automatically deleted after your agent is configured._
                 _Location: ~/.t1-super-ai/HATCH.md_
                 """;
     }
 
-    private String getCharacterTemplateContent() {
-        return "# 🤖 Agent Character Profile\n\n" +
-                "> **Status:** Active Configuration\n" +
-                "> **Last Updated:** {{TIMESTAMP}}\n\n" +
-                "## 👤 User Information\n\n" +
-                "**Name:** {{USER_NAME}}\n" +
-                "**Pronouns:** {{USER_PRONOUNS}}\n" +
-                "**Work Focus:** {{USER_FOCUS}}\n" +
-                "**Timezone:** {{USER_TIMEZONE}}\n\n" +
-                "## 🎭 Agent Identity\n\n" +
-                "**Agent Name:** {{AGENT_NAME}}\n" +
-                "**Purpose:** {{AGENT_PURPOSE}}\n\n" +
-                "## 💬 Communication Profile\n\n" +
-                "**Style:** {{COMMUNICATION_STYLE}}\n" +
-                "**Personality:** {{PERSONALITY_TRAITS}}\n" +
-                "**Emoji Preference:** {{EMOJI_PREFERENCE}}\n\n" +
-                "**Your workspace**: Your workspace where you find all configurations, including /agents, /plugins, /mcp-servers, /skills, USAGE.MD, CHARACTER.md and credentions.json, is in the users home directory '.t1-super-ai' folder.\n\n" +
-                "### General behavioral guidelines\n" +
-                "- Always align with the user's preferences and work focus\n" +
-                "- Do not ask too many questions unless you are unsure\n" +
-                "- Ask if you need credentials to access resources unless they are already defined in your 'credentials.json' file.\n\n" +
-                "### MCP Servers\n" +
-                "You are connected to a local MCP server that provides core tools that give you read/write access, bash and cmd to execute commands, web_search to search the web.\nExternal MCP server configurations can be found under the users home directory in the folder 'mcpservers'\n\n"
-                +
-                "### Skills\n" +
-                "Custom skills can be found in your workspace in the folder 'skills'\n\n" +
-                "### Plugins and tools\n" +
-                "Custom plugins (each containing multiple tools) can be found in your workspace in the folder 'plugins'. Each tool has a 'plugins.json' file defining the tool and a README.md how to use each tool.\n\n" +
-                "---\n\n" +
-                "For more information on configuring tools, plugins, MCP servers, and skills, please refer to the USAGE.md and CONFIGURATION_GUIDE.md files in your workspace.\n\n" +
-                "---\n\n" +
-                "_This file is automatically loaded as context for every session._\n";
+    /**
+     * Create the USER.md file in workspace root with user information
+     * This is called during the initial hatching process
+     */
+    public void createUserMd(
+            final String userName,
+            final String userPronouns,
+            final String userFocus,
+            final String defaultAgent) throws IOException {
+
+        final Path userPath = Paths.get(WORKSPACE_DIR, "USER.md");
+        final String template = AgentConfigService.getUserTemplateContent();
+
+        final String content = template
+                .replace("{{TIMESTAMP}}", java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME))
+                .replace("{{USER_NAME}}", userName)
+                .replace("{{USER_PRONOUNS}}", userPronouns)
+                .replace("{{USER_FOCUS}}", userFocus)
+                .replace("{{USER_TIMEZONE}}", System.getProperty("user.timezone", "UTC"))
+                .replace("{{DEFAULT_AGENT}}", defaultAgent != null ? defaultAgent : "");
+
+        Files.writeString(userPath, content);
+        log.info("✅ Created USER.md in workspace root with default agent: {}", defaultAgent);
+    }
+
+    /**
+     * Complete the hatching process by creating USER.md
+     * This is called during the initial hatching process after collecting user information
+     */
+    public void createUserProfile(
+            final String userName,
+            final String userPronouns,
+            final String userFocus,
+            final String defaultAgent) throws IOException {
+
+        // Create USER.md with user information
+        createUserMd(userName, userPronouns, userFocus, defaultAgent);
+
+        // Note: The initial agent CHARACTER.md will be created by the calling code
+        // using AgentConfigService.createCharacterMd() for the agent folder
+
+        // Delete HATCH.md to mark setup complete
+        final Path hatchPath = Paths.get(WORKSPACE_DIR, "HATCH.md");
+        Files.deleteIfExists(hatchPath);
+        log.info("🎉 Setup complete - HATCH.md removed");
     }
 }

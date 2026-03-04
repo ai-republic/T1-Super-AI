@@ -288,7 +288,7 @@ public class AgentOrchestrator {
     private List<Message> convertHistoryToMessages() {
         final List<Message> messages = new ArrayList<>();
 
-        // Load session context (CHARACTER.md and USAGE.md) on first message
+        // Load session context (USER.md and CHARACTER.md) on first message
         if (sessionContext == null) {
             sessionContext = sessionContextManager.buildInitialContext();
         }
@@ -332,7 +332,7 @@ public class AgentOrchestrator {
 
     public void reloadSessionContext() {
         sessionContext = sessionContextManager.buildInitialContext();
-        log.info("🔄 Session context reloaded from CHARACTER.md and USAGE.md");
+        log.info("🔄 Session context reloaded from USER.md and CHARACTER.md");
         formatter.printSuccess("Session context reloaded - CHARACTER and USAGE profiles refreshed");
     }
 
@@ -340,15 +340,7 @@ public class AgentOrchestrator {
      * Reload session context for a specific agent
      */
     public void reloadSessionContext(String agentName) {
-        if (agentName == null || agentName.equals("master")) {
-            // For master agent, use the global CHARACTER.md
-            reloadSessionContext();
-        } else {
-            // For other agents, load their specific CHARACTER.md
-            sessionContext = sessionContextManager.buildInitialContext(agentName);
-            log.info("🔄 Session context reloaded for agent '{}' from its CHARACTER.md", agentName);
-            formatter.printSuccess("Session context reloaded for agent '" + agentName + "'");
-        }
+if (agentName == null) {            log.warn("Cannot reload session context for null agent name");            return;        }        // Load agent-specific CHARACTER.md and USER.md        sessionContext = sessionContextManager.buildInitialContext(agentName);        log.info("🔄 Session context reloaded for agent '{}' from USER.md and CHARACTER.md", agentName);        formatter.printSuccess("Session context reloaded for agent '" + agentName + "'");    }
     }
 
     public List<ConversationMessage> getConversationHistory() {

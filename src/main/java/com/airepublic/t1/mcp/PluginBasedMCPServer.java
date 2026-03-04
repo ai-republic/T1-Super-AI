@@ -13,10 +13,12 @@ import com.airepublic.t1.plugins.PluginManager;
 import com.airepublic.t1.tools.AgentTool;
 import com.airepublic.t1.tools.BashTool;
 import com.airepublic.t1.tools.CmdTool;
+import com.airepublic.t1.tools.CreateAgentTool;
 import com.airepublic.t1.tools.ListAgentsTool;
 import com.airepublic.t1.tools.ListDirectoryTool;
 import com.airepublic.t1.tools.ReadFileTool;
 import com.airepublic.t1.tools.SendMessageToAgentTool;
+import com.airepublic.t1.tools.UpdateAgentCharacterTool;
 import com.airepublic.t1.tools.WebFetchTool;
 import com.airepublic.t1.tools.WriteFileTool;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -59,6 +61,8 @@ public class PluginBasedMCPServer {
     private final ListDirectoryTool listDirectoryTool;
     private final ListAgentsTool listAgentsTool;
     private final SendMessageToAgentTool sendMessageToAgentTool;
+    private final CreateAgentTool createAgentTool;
+    private final UpdateAgentCharacterTool updateAgentCharacterTool;
 
     // Plugin manager for loading plugin-based tools
     private final PluginManager pluginManager;
@@ -101,8 +105,10 @@ public class PluginBasedMCPServer {
         coreTools.put(listDirectoryTool.getName(), listDirectoryTool);
         coreTools.put(listAgentsTool.getName(), listAgentsTool);
         coreTools.put(sendMessageToAgentTool.getName(), sendMessageToAgentTool);
+        coreTools.put(createAgentTool.getName(), createAgentTool);
+        coreTools.put(updateAgentCharacterTool.getName(), updateAgentCharacterTool);
 
-        log.info("Initialized {} core tools (including inter-agent communication tools)", coreTools.size());
+        log.info("Initialized {} core tools (including inter-agent communication and agent management tools)", coreTools.size());
     }
 
 

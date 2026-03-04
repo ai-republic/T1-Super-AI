@@ -14,13 +14,31 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(description = "Request to update agent configuration. All fields are optional - only provided fields will be updated.")
+@Schema(description = "Request to update agent configuration including CHARACTER.md fields. All fields are optional - only provided fields will be updated.")
 public class UpdateAgentRequest {
-    @Schema(description = "Role or title of the agent", example = "Code Assistant")
+    @Schema(description = "Role or title of the agent", example = "Senior Code Assistant")
     private String role;
 
-    @Schema(description = "Context or system prompt for the agent", example = "You are a helpful coding assistant specializing in Java")
-    private String context;
+    @Schema(description = "Purpose or primary objective of the agent",
+            example = "Assist developers with code writing, debugging, and architecture decisions")
+    private String purpose;
+
+    @Schema(description = "Personality traits and characteristics",
+            example = "Professional, patient, detail-oriented, and encouraging")
+    private String personality;
+
+    @Schema(description = "Communication style preferences",
+            example = "Uses clear, concise language with code examples")
+    private String communicationStyle;
+
+    @Schema(description = "Areas of specialization and expertise",
+            example = "Java, Spring Boot, REST APIs, database design")
+    private String specialization;
+
+    @Schema(description = "Emoji usage preference",
+            example = "sparingly",
+            allowableValues = {"freely", "sparingly", "none"})
+    private String emojiPreference;
 
     @Schema(description = "LLM provider to use", example = "OPENAI", allowableValues = {"OPENAI", "ANTHROPIC", "OLLAMA"})
     private LLMProvider provider;

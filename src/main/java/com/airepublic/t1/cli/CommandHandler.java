@@ -117,7 +117,7 @@ public class CommandHandler {
                 /agent list              List all agents
                 /agent use <name>        Switch to a different agent
                 /agent remove <name>     Remove an agent
-                /reload                  Reload CHARACTER.md and USAGE.md context
+                /reload                  Reload USER.md and CHARACTER.md context
                 /clear                   Clear the screen
                 /exit, /quit             Exit the application
 
@@ -558,18 +558,27 @@ public class CommandHandler {
             String defaultModel = llmConfig != null ? llmConfig.getModel() : "default";
 
             IndividualAgentConfig agentConfig = new IndividualAgentConfig(
-                agentName,
-                "General Purpose Agent",
-                "A helpful AI assistant",
-                defaultProvider,
-                defaultModel
+                agentName,                          // name
+                "General Purpose Agent",             // role
+                "A helpful AI assistant",            // purpose
+                "General assistance",                // specialization
+                "Clear and concise",                 // style
+                "Professional and helpful",          // personality
+                "sparingly",                         // emojiPreference
+                "active",                            // status
+                java.time.LocalDateTime.now(),       // createdAt
+                java.time.LocalDateTime.now(),       // lastModifiedAt
+                defaultProvider,                     // provider
+                defaultModel                         // model
             );
 
-            // Save configuration
+            // Create agent folder and CHARACTER.md
             try {
-                agentConfigService.saveAgentConfig(agentConfig);
+                agentConfigService.createAgentFolder(agentName);
+                agentConfigService.createCharacterMd(agentConfig, AgentConfigService.getCharacterBehaviorTemplate());
+                agentConfigService.createUsageMd(agentName, agentConfig);
             } catch (Exception e) {
-                formatter.printError("Warning: Could not save agent configuration: " + e.getMessage());
+                formatter.printError("Warning: Could not create agent files: " + e.getMessage());
             }
 
             // Create the agent
@@ -602,7 +611,7 @@ public class CommandHandler {
             }
 
             // Check if already on this agent
-            if (agentManager.getCurrentAgentName().equals(agentName)) {
+            if (agentName.equals(agentManager.getCurrentAgentName())) {
                 formatter.printInfo("Already using agent: " + agentName);
                 return;
             }
@@ -652,7 +661,8 @@ public class CommandHandler {
             if (agent.getConfig() != null) {
                 IndividualAgentConfig config = agent.getConfig();
                 System.out.println("    📋 Role: " + config.getRole());
-                System.out.println("    📝 Context: " + config.getContext());
+                System.out.println("    📝 Purpose: " + config.getPurpose());
+                System.out.println("    ⭐ Specialization: " + config.getSpecialization());
                 System.out.println("    🔧 Provider: " + config.getProvider() + " | Model: " + config.getModel());
             }
 
@@ -706,7 +716,7 @@ public class CommandHandler {
     }
 
     private void handleReload() {
-        formatter.printInfo("Reloading session context from CHARACTER.md and USAGE.md...");
+        formatter.printInfo("Reloading session context from USER.md and CHARACTER.md...");
         orchestrator.reloadSessionContext();
     }
 

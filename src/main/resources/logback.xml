@@ -6,7 +6,7 @@
         </encoder>
     </appender>
 
-    <logger name="com.aiagent" level="DEBUG"/>
+    <logger name="com.aiagent" level="WARN"/>
     <logger name="org.springframework.ai" level="INFO"/>
     <logger name="org.springframework" level="WARN"/>
 

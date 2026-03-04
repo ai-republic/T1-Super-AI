@@ -1,40 +1,35 @@
 package com.airepublic.t1.model;
 
-import com.airepublic.t1.model.AgentConfiguration.LLMProvider;
-import lombok.Data;
-
 import java.time.LocalDateTime;
+
+import com.airepublic.t1.model.AgentConfiguration.LLMProvider;
+
+import lombok.AllArgsConstructor;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * Configuration for an individual agent instance.
  * Each agent can have its own role, context, and LLM provider/model settings.
  */
 @Data
+@AllArgsConstructor
+@NoArgsConstructor
 public class IndividualAgentConfig {
     private String name;
     private String role;
-    private String context;
+    private String purpose;
+    private String specialization;
+    private String style;
+    private String personality;
+    private String emojiPreference;
+    private String status;
+    private LocalDateTime createdAt = LocalDateTime.now();
+    private LocalDateTime lastModifiedAt = LocalDateTime.now();
     private LLMProvider provider;
     private String model;
-    private LocalDateTime createdAt;
-    private LocalDateTime lastModifiedAt;
-
-    public IndividualAgentConfig() {
-        this.createdAt = LocalDateTime.now();
-        this.lastModifiedAt = LocalDateTime.now();
-    }
-
-    public IndividualAgentConfig(String name, String role, String context, LLMProvider provider, String model) {
-        this.name = name;
-        this.role = role;
-        this.context = context;
-        this.provider = provider;
-        this.model = model;
-        this.createdAt = LocalDateTime.now();
-        this.lastModifiedAt = LocalDateTime.now();
-    }
 
     public void updateLastModified() {
-        this.lastModifiedAt = LocalDateTime.now();
+        lastModifiedAt = LocalDateTime.now();
     }
 }

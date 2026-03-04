@@ -3,8 +3,8 @@ package com.airepublic.t1.cli;
 import static org.fusesource.jansi.Ansi.ansi;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -57,7 +57,7 @@ public class SplitPaneCLI implements CLI {
     private final AtomicBoolean running = new AtomicBoolean(true);
     private final AtomicBoolean processing = new AtomicBoolean(false);
     private final AtomicBoolean inWizardMode = new AtomicBoolean(false);
-    private String currentAgentName = "master";
+    private String currentAgentName = null;
     private StringBuilder inputBuffer = new StringBuilder();
     private int cursorPosition = 0; // Cursor position within input buffer
 
@@ -134,11 +134,45 @@ public class SplitPaneCLI implements CLI {
             // Set the output callback for AgentSessionController (after terminal is ready)
             sessionController.setOutputCallback(this::printOutput);
 
-            agentManager.initializeMasterAgent(orchestrator);
-            printOutput("\033[32m✓ Master agent initialized\033[0m");
 
             // Load saved agent configurations from disk
             agentManager.loadSavedAgents(orchestrator);
+
+            // Switch to default agent from USER.md or first available agent
+            try {
+                com.airepublic.t1.config.AgentConfigService.UserInfo userInfo = agentConfigService.readUserInfo();
+                log.info("Read USER.md - default agent: '{}'", userInfo.defaultAgent);
+
+                if (userInfo.defaultAgent != null && !userInfo.defaultAgent.isEmpty()) {
+                    if (agentManager.hasAgent(userInfo.defaultAgent)) {
+                        agentManager.switchToAgent(userInfo.defaultAgent);
+                        log.info("✅ Switched to default agent: {}", userInfo.defaultAgent);
+                    } else {
+                        log.warn("⚠️ Default agent '{}' not found. Switching to first available agent.", userInfo.defaultAgent);
+                        java.util.List<com.airepublic.t1.agent.Agent> agents = agentManager.listAgents();
+                        if (!agents.isEmpty()) {
+                            String firstAgent = agents.get(0).getName();
+                            agentManager.switchToAgent(firstAgent);
+                            log.info("✅ Switched to first available agent: {}", firstAgent);
+                        } else {
+                            log.error("❌ No agents available!");
+                        }
+                    }
+                } else {
+                    log.warn("⚠️ No default agent specified in USER.md");
+                    java.util.List<com.airepublic.t1.agent.Agent> agents = agentManager.listAgents();
+                    log.info("Found {} agents loaded in memory", agents.size());
+                    if (!agents.isEmpty()) {
+                        String firstAgent = agents.get(0).getName();
+                        agentManager.switchToAgent(firstAgent);
+                        log.info("✅ Switched to first available agent: {}", firstAgent);
+                    } else {
+                        log.error("❌ No agents available!");
+                    }
+                }
+            } catch (Exception e) {
+                log.error("❌ Error during agent switching at startup", e);
+            }
 
             // Check if we need to run HATCH process first
             if (needsHatching && hatchingService.needsHatching()) {
@@ -466,7 +500,13 @@ public class SplitPaneCLI implements CLI {
                 }
             }
 
-            final String prompt = String.format("[%s/%s] %s", provider, model, currentAgentName);
+            // Sync with AgentManager's current agent
+            if (currentAgentName == null || !currentAgentName.equals(agentManager.getCurrentAgentName())) {
+                currentAgentName = agentManager.getCurrentAgentName();
+            }
+
+            final String agentDisplay = currentAgentName != null ? currentAgentName : "no-agent";
+            final String prompt = String.format("[%s/%s] %s", provider, model, agentDisplay);
 
             // Save cursor position
             terminal.writer().print("\0337");
@@ -992,7 +1032,7 @@ public class SplitPaneCLI implements CLI {
         final String initiationMessage = hatchingService.getHatchInitiationMessage();
         printOutput(initiationMessage);
         printOutput("");
-        printOutput("Let's start with some basics about you!");
+        printOutput("This wizard will guide you through your profile and creating a personalized agent.");
         printOutput("");
         printOutput("\033[36m═══════════════════════════════════════════════════════════════\033[0m");
         printOutput("\033[36m                     STEP 1: ABOUT YOU                         \033[0m");
@@ -1001,6 +1041,7 @@ public class SplitPaneCLI implements CLI {
         printOutput("\033[33mWhat should I call you?\033[0m");
         printOutput("(e.g., 'Alex', 'Dr. Smith', 'Team Lead', or just your name)");
         printOutput("");
+        printOutput("→ Your Name: ");
     }
 
     /**
@@ -1010,79 +1051,135 @@ public class SplitPaneCLI implements CLI {
         hatchConversation.add("User: " + input);
 
         switch (hatchStep) {
-            case 0: // Name
+            case 0: // User Name
                 printOutput("");
                 printOutput("Great! Nice to meet you, " + input + "!");
                 printOutput("");
                 printOutput("\033[33mWhat are your preferred pronouns?\033[0m (optional)");
                 printOutput("(e.g., 'they/them', 'she/her', 'he/him', or leave blank to skip)");
                 printOutput("");
-                hatchConversation.add("Assistant: Collected name, asking for pronouns");
+                printOutput("→ Pronouns: ");
+                hatchConversation.add("Assistant: Collected user name, asking for pronouns");
                 hatchStep++;
                 break;
 
-            case 1: // Pronouns
+            case 1: // User Pronouns
                 printOutput("");
                 printOutput("Thanks! Now, \033[33mwhat do you mainly work on?\033[0m");
                 printOutput("(e.g., 'Full-stack web development', 'Data science', 'DevOps', 'Research')");
                 printOutput("");
+                printOutput("→ Work Focus: ");
                 hatchConversation.add("Assistant: Collected pronouns, asking for work focus");
                 hatchStep++;
                 break;
 
-            case 2: // Work focus
+            case 2: // User Work Focus
                 printOutput("");
                 printOutput("\033[36m═══════════════════════════════════════════════════════════════\033[0m");
                 printOutput("\033[36m                 STEP 2: NAME YOUR AGENT                       \033[0m");
                 printOutput("\033[36m═══════════════════════════════════════════════════════════════\033[0m");
                 printOutput("");
-                printOutput("\033[33mWhat would you like to call me\033[0m (your AI agent)?");
+                printOutput("\033[33mWhat would you like to name your AI agent?\033[0m");
                 printOutput("(e.g., 'Atlas', 'CodeWizard', 'DevBuddy', 'Professor', 'Sage')");
                 printOutput("");
+                printOutput("→ Agent Name: ");
                 hatchConversation.add("Assistant: Collected work focus, asking for agent name");
                 hatchStep++;
                 break;
 
-            case 3: // Agent name
+            case 3: // Agent Name
                 printOutput("");
-                printOutput("Nice! I'll be '" + input + "' from now on!");
+                printOutput("Nice! I'll create an agent named '" + input + "' for you!");
                 printOutput("");
-                printOutput("\033[33mWhat's my primary purpose?\033[0m What will you mainly use me for?");
-                printOutput("(e.g., 'Help with daily coding', 'Research assistant', 'DevOps automation')");
+                printOutput("\033[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m");
+                printOutput("\033[36mSTEP 3: Define Agent Role\033[0m");
+                printOutput("\033[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m");
                 printOutput("");
-                hatchConversation.add("Assistant: Collected agent name, asking for purpose");
+                printOutput("\033[33mWhat role will this agent play?\033[0m");
+                printOutput("Examples: Code Reviewer, Data Analyst, DevOps Engineer");
+                printOutput("");
+                printOutput("→ Agent Role: ");
+                hatchConversation.add("Assistant: Collected agent name, asking for role");
                 hatchStep++;
                 break;
 
-            case 4: // Purpose
+            case 4: // Agent Role
                 printOutput("");
-                printOutput("\033[36m═══════════════════════════════════════════════════════════════\033[0m");
-                printOutput("\033[36m              STEP 3: COMMUNICATION STYLE                      \033[0m");
-                printOutput("\033[36m═══════════════════════════════════════════════════════════════\033[0m");
+                printOutput("\033[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m");
+                printOutput("\033[36mSTEP 4: Define Purpose\033[0m");
+                printOutput("\033[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m");
                 printOutput("");
-                printOutput("\033[33mHow should I communicate with you?\033[0m");
-                printOutput("Choose: Professional / Friendly / Concise / Educational / Enthusiastic");
+                printOutput("\033[33mWhat is the main purpose of this agent?\033[0m");
+                printOutput("Examples: Review pull requests for code quality, Analyze data patterns");
                 printOutput("");
-                hatchConversation.add("Assistant: Collected purpose, asking for communication style");
+                printOutput("→ Purpose: ");
+                hatchConversation.add("Assistant: Collected agent role, asking for purpose");
                 hatchStep++;
                 break;
 
-            case 5: // Communication style
+            case 5: // Purpose
                 printOutput("");
-                printOutput("Perfect! And \033[33mshould I use emojis?\033[0m");
-                printOutput("Choose: Freely / Sparingly / No emojis");
+                printOutput("\033[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m");
+                printOutput("\033[36mSTEP 5: Define Specialization\033[0m");
+                printOutput("\033[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m");
                 printOutput("");
-                hatchConversation.add("Assistant: Collected communication style, asking for emoji preference");
+                printOutput("\033[33mWhat are this agent's areas of expertise?\033[0m");
+                printOutput("Examples: Java Spring Boot, Python data science, AWS infrastructure");
+                printOutput("");
+                printOutput("→ Specialties (or Enter to skip): ");
+                hatchConversation.add("Assistant: Collected purpose, asking for specialization");
                 hatchStep++;
                 break;
 
-            case 6: // Emoji preference
+            case 6: // Specialization
+                printOutput("");
+                printOutput("\033[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m");
+                printOutput("\033[36mSTEP 6: Define Personality\033[0m");
+                printOutput("\033[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m");
+                printOutput("");
+                printOutput("\033[33mDescribe the agent's personality traits.\033[0m");
+                printOutput("Examples: Thorough and detail-oriented, Encouraging and supportive");
+                printOutput("");
+                printOutput("→ Personality: ");
+                hatchConversation.add("Assistant: Collected specialization, asking for personality");
+                hatchStep++;
+                break;
+
+            case 7: // Personality
+                printOutput("");
+                printOutput("\033[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m");
+                printOutput("\033[36mSTEP 7: Communication Style\033[0m");
+                printOutput("\033[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m");
+                printOutput("");
+                printOutput("\033[33mHow should the agent communicate?\033[0m");
+                printOutput("Examples: Technical and precise, Friendly and casual, Formal and detailed");
+                printOutput("");
+                printOutput("→ Style: ");
+                hatchConversation.add("Assistant: Collected personality, asking for communication style");
+                hatchStep++;
+                break;
+
+            case 8: // Communication Style
+                printOutput("");
+                printOutput("\033[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m");
+                printOutput("\033[36mSTEP 8: Constraints (Optional)\033[0m");
+                printOutput("\033[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m");
+                printOutput("");
+                printOutput("\033[33mAny constraints or boundaries for this agent?\033[0m");
+                printOutput("Examples: Only provide code reviews, Focus on backend only");
+                printOutput("");
+                printOutput("→ Constraints (or Enter to skip): ");
+                hatchConversation.add("Assistant: Collected communication style, asking for constraints");
+                hatchStep++;
+                break;
+
+            case 9: // Constraints
                 printOutput("");
                 printOutput("\033[36m═══════════════════════════════════════════════════════════════\033[0m");
                 printOutput("\033[36m           ✨ SETUP COMPLETE - CREATING YOUR PROFILE           \033[0m");
                 printOutput("\033[36m═══════════════════════════════════════════════════════════════\033[0m");
                 printOutput("");
-                hatchConversation.add("Assistant: Collected emoji preference, completing setup");
+                hatchConversation.add("Assistant: Collected constraints, completing setup");
 
                 completeHatchProcess();
                 break;
@@ -1115,20 +1212,25 @@ public class SplitPaneCLI implements CLI {
             hatchData = parseHatchConversationManually();
         }
 
-        // Complete the HATCH process
+        // Get agent name from hatch data for later use
+        final String agentName = hatchData.getOrDefault("agent_name", "Assistant");
+
+        // Complete the HATCH process (creates USER.md, agent files, and loads agent into AgentManager)
         hatchingService.completeHatchProcess(hatchData);
 
-        printOutput("\033[32m✅ Your CHARACTER profile has been created!\033[0m");
-        printOutput("");
-        printOutput("You can review and edit it at: ~/.t1-super-ai/CHARACTER.md");
+        printOutput("\033[32m✅ Your USER profile has been created!\033[0m");
+        printOutput("\033[32m✅ Your agent CHARACTER profile has been created!\033[0m");
         printOutput("");
         printOutput("\033[36m═══════════════════════════════════════════════════════════════\033[0m");
         printOutput("\033[36m              🎉 READY TO START YOUR SESSION!                  \033[0m");
         printOutput("\033[36m═══════════════════════════════════════════════════════════════\033[0m");
         printOutput("");
-        printOutput("Your agent is now configured and ready to help.");
+        printOutput("Your agent '" + agentName + "' is now configured and ready to help.");
         printOutput("Type /help to see available commands, or just start chatting!");
         printOutput("");
+
+        // Update the CLI prompt to show the new agent
+        updatePromptAgent(agentName);
 
         // Exit HATCH mode
         inHatchMode = false;
@@ -1149,25 +1251,20 @@ public class SplitPaneCLI implements CLI {
                 }
             }
 
-            if (userResponses.size() >= 6) {
+            if (userResponses.size() >= 9) {
                 data.put("user_name", userResponses.get(0));
                 data.put("user_pronouns", userResponses.get(1));
                 data.put("user_work_focus", userResponses.get(2));
                 data.put("agent_name", userResponses.get(3));
-                data.put("agent_purpose", userResponses.get(4));
-                data.put("communication_style", userResponses.get(5));
-                if (userResponses.size() >= 7) {
-                    data.put("emoji_preference", userResponses.get(6));
+                data.put("agent_role", userResponses.get(4));
+                data.put("agent_purpose", userResponses.get(5));
+                data.put("agent_specialization", userResponses.get(6));
+                data.put("agent_personality", userResponses.get(7));
+                data.put("communication_style", userResponses.get(8));
+                if (userResponses.size() >= 10) {
+                    data.put("constraints", userResponses.get(9));
                 }
             }
-
-            // Build personality traits
-            final String personality = String.format(
-                    "%s assistant with a %s communication style",
-                    data.getOrDefault("agent_purpose", "helpful"),
-                    data.getOrDefault("communication_style", "professional")
-                    );
-            data.put("personality_traits", personality);
 
         } catch (final Exception e) {
             log.error("Error parsing HATCH conversation manually", e);
@@ -1252,23 +1349,34 @@ public class SplitPaneCLI implements CLI {
             printOutput("Examples: Technical and precise, Friendly and casual, Formal and detailed");
             final String commStyle = promptForInput("Enter communication style: ", "Clear and concise");
 
-            // Step 7: Specialties (optional, for CHARACTER.md)
+            // Step 7: Specialization (for CHARACTER.md)
             printOutput("");
-            printOutput("⭐ Step 7: Specialties (Optional)");
+            printOutput("⭐ Step 7: Specialization");
             printOutput("What are this agent's areas of expertise?");
             printOutput("Examples: Java Spring Boot, Python data science, AWS infrastructure");
-            final String specialties = promptForInput("Enter specialties (or press Enter to skip): ", "General software development");
+            final String specialization = promptForInput("Enter specialization: ", "General software development");
 
-            // Step 8: Constraints (optional, for CHARACTER.md)
+            // Step 8: Emoji Preference (for CHARACTER.md)
             printOutput("");
-            printOutput("🚧 Step 8: Constraints (Optional)");
-            printOutput("Any constraints or boundaries for this agent?");
-            printOutput("Examples: Only provide code reviews, Focus on backend only");
-            final String constraints = promptForInput("Enter constraints (or press Enter to skip): ", "None");
+            printOutput("😊 Step 8: Emoji Preference");
+            printOutput("How should this agent use emojis?");
+            printOutput("Options: freely, sparingly, none");
+            final String emojiPreference = promptForInput("Enter emoji preference: ", "sparingly");
 
-            // Create agent configuration
+            // Create agent configuration with all required fields
             final IndividualAgentConfig agentConfig = new IndividualAgentConfig(
-                    agentName, role, context, selectedProvider, selectedModel
+                    agentName,              // name
+                    role,                   // role
+                    context,                // purpose
+                    specialization,         // specialization
+                    commStyle,              // style
+                    personality,            // personality
+                    emojiPreference,        // emojiPreference
+                    "active",               // status
+                    java.time.LocalDateTime.now(),  // createdAt
+                    java.time.LocalDateTime.now(),  // lastModifiedAt
+                    selectedProvider,       // provider
+                    selectedModel           // model
                     );
 
             // Create agent folder
@@ -1278,25 +1386,10 @@ public class SplitPaneCLI implements CLI {
                 printOutput("⚠️  Warning: Could not create agent folder: " + e.getMessage());
             }
 
-            // Save configuration
+            // Create CHARACTER.md with behavior template
             try {
-                agentConfigService.saveAgentConfig(agentConfig);
+                agentConfigService.createCharacterMd(agentConfig, AgentConfigService.getCharacterBehaviorTemplate());
                 printOutput("");
-                printOutput("✅ Agent configuration saved");
-            } catch (final Exception e) {
-                printOutput("⚠️  Warning: Could not save agent configuration: " + e.getMessage());
-            }
-
-            // Create CHARACTER.md
-            try {
-                final Map<String, String> hatchData = new HashMap<>();
-                hatchData.put("agent_role", role);
-                hatchData.put("agent_purpose", context);
-                hatchData.put("agent_personality", personality);
-                hatchData.put("communication_style", commStyle);
-                hatchData.put("specialties", specialties);
-                hatchData.put("constraints", constraints);
-                agentConfigService.createCharacterMd(agentName, hatchData);
                 printOutput("✅ CHARACTER.md created");
             } catch (final Exception e) {
                 printOutput("⚠️  Warning: Could not create CHARACTER.md: " + e.getMessage());

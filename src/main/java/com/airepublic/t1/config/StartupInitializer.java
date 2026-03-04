@@ -1,18 +1,19 @@
 package com.airepublic.t1.config;
 
-import com.airepublic.t1.service.HatchingService;
-import com.airepublic.t1.session.SessionContextManager;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
-import org.springframework.stereotype.Component;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.stereotype.Component;
+
+import com.airepublic.t1.session.SessionContextManager;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Handles application startup initialization
@@ -27,7 +28,6 @@ public class StartupInitializer {
     private final WorkspaceInitializer workspaceInitializer;
     private final ConfigurationLoader configurationLoader;
     private final SessionContextManager sessionContextManager;
-    private final HatchingService hatchingService;
 
     // Use Paths.get() for cross-platform compatibility (Windows, Linux, macOS)
     private static final String WORKSPACE_DIR = Paths.get(System.getProperty("user.home"), ".t1-super-ai").toString();
@@ -37,7 +37,7 @@ public class StartupInitializer {
         log.info("🚀 T1 Super AI starting up...");
 
         // Step 1: Initialize workspace (creates directories and instructional files)
-        boolean needsHatching = workspaceInitializer.initializeWorkspace();
+        final boolean needsHatching = workspaceInitializer.initializeWorkspace();
 
         // Step 2: Copy documentation files from user's home .t1-super-ai if they exist
         // Otherwise create them from embedded content
@@ -56,7 +56,7 @@ public class StartupInitializer {
             log.info("✅ Agent configured - CHARACTER.md loaded");
 
             // Show context summary
-            String contextSummary = sessionContextManager.getContextSummary();
+            final String contextSummary = sessionContextManager.getContextSummary();
             log.info("📋 Session Context:\n{}", contextSummary);
         }
 
@@ -69,9 +69,9 @@ public class StartupInitializer {
      */
     private void copyDocumentationFiles() {
         try {
-            Path userHome = Paths.get(System.getProperty("user.home"));
-            Path sourceBase = userHome.resolve(".t1-super-ai");
-            Path targetBase = Paths.get(WORKSPACE_DIR);
+            final Path userHome = Paths.get(System.getProperty("user.home"));
+            final Path sourceBase = userHome.resolve(".t1-super-ai");
+            final Path targetBase = Paths.get(WORKSPACE_DIR);
 
             // If source and target are the same, we're already in the right place
             if (sourceBase.toAbsolutePath().equals(targetBase.toAbsolutePath())) {
@@ -80,7 +80,7 @@ public class StartupInitializer {
             }
 
             // Files to potentially copy (if they don't exist in target)
-            String[] docFiles = {
+            final String[] docFiles = {
                 "HATCH.md",
                 "USAGE.md",
                 "README.md",
@@ -90,8 +90,8 @@ public class StartupInitializer {
             };
 
             int copiedCount = 0;
-            for (String filename : docFiles) {
-                Path targetPath = targetBase.resolve(filename);
+            for (final String filename : docFiles) {
+                final Path targetPath = targetBase.resolve(filename);
 
                 // Skip if file already exists
                 if (Files.exists(targetPath)) {
@@ -99,7 +99,7 @@ public class StartupInitializer {
                 }
 
                 // Try to copy from user's home .t1-super-ai
-                Path sourcePath = sourceBase.resolve(filename);
+                final Path sourcePath = sourceBase.resolve(filename);
                 if (Files.exists(sourcePath)) {
                     Files.copy(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
                     copiedCount++;
@@ -111,7 +111,7 @@ public class StartupInitializer {
                 log.info("📚 Copied {} documentation files to workspace", copiedCount);
             }
 
-        } catch (IOException e) {
+        } catch (final IOException e) {
             log.warn("Could not copy some documentation files: {}", e.getMessage());
         }
     }

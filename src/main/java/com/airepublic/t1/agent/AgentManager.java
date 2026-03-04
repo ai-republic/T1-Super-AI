@@ -28,7 +28,7 @@ public class AgentManager {
     private final SessionContextManager sessionContextManager;
     private final LLMClientFactory llmClientFactory;
 
-    private String currentAgentName = "master";
+    private String currentAgentName = null;
     private ChatModel chatModel;
 
     public AgentManager(
@@ -52,38 +52,28 @@ public class AgentManager {
         log.info("ChatModel configured for AgentManager");
     }
 
-    /**
-     * Initialize the master agent
-     */
-    public void initializeMasterAgent(AgentOrchestrator orchestrator) {
-        if (!agents.containsKey("master")) {
-            Agent masterAgent = new Agent("master", orchestrator);
-            masterAgent.setStatus("active");
-            agents.put("master", masterAgent);
-            log.info("Master agent initialized");
-        }
-    }
 
     /**
      * Load all saved agent configurations from disk and create agent instances.
-     * This should be called after the master agent is initialized.
      */
     public void loadSavedAgents(AgentOrchestrator orchestrator) {
-        log.info("Loading saved agent configurations...");
+        log.info("🔄 Loading saved agent configurations...");
 
         List<IndividualAgentConfig> savedConfigs = agentConfigService.listAllAgentConfigs();
 
         if (savedConfigs.isEmpty()) {
-            log.info("No saved agent configurations found");
+            log.warn("⚠️ No saved agent configurations found - no agents will be loaded");
             return;
         }
+
+        log.info("Found {} saved agent config(s) to load", savedConfigs.size());
 
         int loadedCount = 0;
         for (IndividualAgentConfig config : savedConfigs) {
             try {
                 String agentName = config.getName();
 
-                // Skip if agent already exists (e.g., master)
+                // Skip if agent already exists
                 if (agents.containsKey(agentName)) {
                     log.debug("Agent '{}' already exists in memory, skipping", agentName);
                     continue;
@@ -97,15 +87,15 @@ public class AgentManager {
                 agents.put(agentName, agent);
                 loadedCount++;
 
-                log.info("Loaded agent '{}' with provider: {}, model: {}",
+                log.info("✅ Loaded agent '{}' (provider: {}, model: {})",
                     agentName, config.getProvider(), config.getModel());
 
             } catch (Exception e) {
-                log.error("Failed to load agent configuration: {}", config.getName(), e);
+                log.error("❌ Failed to load agent configuration: {}", config.getName(), e);
             }
         }
 
-        log.info("Successfully loaded {} agent(s) from disk", loadedCount);
+        log.info("📊 Successfully loaded {} of {} agent(s) from disk", loadedCount, savedConfigs.size());
     }
 
     /**
@@ -125,23 +115,20 @@ public class AgentManager {
             throw new IllegalArgumentException("Agent '" + name + "' already exists");
         }
 
-        // Get current agent to fork from
-        Agent currentAgent = agents.get(currentAgentName);
-        if (currentAgent == null) {
-            throw new IllegalStateException("Current agent '" + currentAgentName + "' not found");
-        }
-
         // Create new agent with shared orchestrator and config
         Agent newAgent = new Agent(name, sharedOrchestrator, config);
 
-        // Copy conversation history from current agent
-        if (currentAgent.getConversationHistory() != null) {
-            List<Agent.ConversationEntry> copiedHistory = new ArrayList<>(
-                currentAgent.getConversationHistory()
-            );
-            newAgent.setConversationHistory(copiedHistory);
-            log.info("Forked {} conversation entries to new agent '{}'",
-                copiedHistory.size(), name);
+        // Copy conversation history from current agent if available
+        if (currentAgentName != null) {
+            Agent currentAgent = agents.get(currentAgentName);
+            if (currentAgent != null && currentAgent.getConversationHistory() != null) {
+                List<Agent.ConversationEntry> copiedHistory = new ArrayList<>(
+                    currentAgent.getConversationHistory()
+                );
+                newAgent.setConversationHistory(copiedHistory);
+                log.info("Forked {} conversation entries to new agent '{}'",
+                    copiedHistory.size(), name);
+            }
         }
 
         // Start the agent thread
@@ -149,6 +136,12 @@ public class AgentManager {
 
         // Register agent
         agents.put(name, newAgent);
+
+        // If this is the first agent, set it as current
+        if (currentAgentName == null) {
+            currentAgentName = name;
+            log.info("Set '{}' as the first agent", name);
+        }
 
         log.info("Created and started new agent: {} with config: {}", name, config != null ? "custom" : "default");
         return newAgent;
@@ -170,6 +163,7 @@ public class AgentManager {
 
     /**
      * Switch to a different agent and reload its session context
+     * Also updates the default agent in USER.md so the system remembers the last active agent
      */
     public void switchToAgent(String name) {
         if (!agents.containsKey(name)) {
@@ -178,6 +172,13 @@ public class AgentManager {
 
         String previousAgent = currentAgentName;
         currentAgentName = name;
+
+        // Update default agent in USER.md
+        try {
+            agentConfigService.updateDefaultAgent(name);
+        } catch (Exception e) {
+            log.warn("Could not update default agent in USER.md: {}", e.getMessage());
+        }
 
         // Get the agent's orchestrator and reload its session context
         Agent agent = agents.get(name);
@@ -207,19 +208,21 @@ public class AgentManager {
      * Remove an agent
      */
     public boolean removeAgent(String name) {
-        if ("master".equals(name)) {
-            throw new IllegalArgumentException("Cannot remove the master agent");
-        }
-
         Agent agent = agents.remove(name);
         if (agent != null) {
             // Stop the agent thread
             agent.stop();
 
-            // If this was the current agent, switch to master
+            // If this was the current agent, switch to first available agent
             if (name.equals(currentAgentName)) {
-                currentAgentName = "master";
-                log.info("Switched back to master agent");
+                if (!agents.isEmpty()) {
+                    String firstAgent = agents.keySet().iterator().next();
+                    currentAgentName = firstAgent;
+                    log.info("Switched to agent: {}", firstAgent);
+                } else {
+                    currentAgentName = null;
+                    log.warn("No agents available after removing '{}'", name);
+                }
             }
 
             log.info("Removed agent: {}", name);

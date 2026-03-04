@@ -74,7 +74,8 @@ public class ListAgentsTool implements AgentTool {
             for (Agent agent : agents) {
                 IndividualAgentConfig config = agent.getConfig();
                 String role = config != null ? config.getRole() : "General Purpose Agent";
-                String context = config != null ? config.getContext() : null;
+                String purpose = config != null ? config.getPurpose() : null;
+                String specialization = config != null ? config.getSpecialization() : null;
 
                 boolean isCurrent = agent.getName().equals(currentAgentName);
 
@@ -83,8 +84,12 @@ public class ListAgentsTool implements AgentTool {
                         isCurrent ? " (YOU)" : ""));
                 result.append(String.format("Role: %s\n", role));
 
-                if (context != null && !context.isEmpty()) {
-                    result.append(String.format("Purpose: %s\n", context));
+                if (purpose != null && !purpose.isEmpty()) {
+                    result.append(String.format("Purpose: %s\n", purpose));
+                }
+
+                if (specialization != null && !specialization.isEmpty()) {
+                    result.append(String.format("Specialization: %s\n", specialization));
                 }
 
                 result.append(String.format("Status: %s\n", agent.getStatus()));

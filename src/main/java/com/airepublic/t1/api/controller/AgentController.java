@@ -5,6 +5,7 @@ import com.airepublic.t1.agent.AgentManager;
 import com.airepublic.t1.agent.AgentOrchestrator;
 import com.airepublic.t1.api.dto.*;
 import com.airepublic.t1.config.AgentConfigService;
+import com.airepublic.t1.config.AgentConfigurationManager;
 import com.airepublic.t1.model.IndividualAgentConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -18,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.file.Path;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
@@ -33,6 +35,7 @@ public class AgentController {
     private final AgentManager agentManager;
     private final AgentOrchestrator orchestrator;
     private final AgentConfigService agentConfigService;
+    private final AgentConfigurationManager configManager;
 
     @Operation(
         summary = "List all agents",
@@ -60,7 +63,7 @@ public class AgentController {
                         return AgentInfo.builder()
                                 .name(agent.getName())
                                 .role(config != null ? config.getRole() : null)
-                                .purpose(null) // Will be loaded from CHARACTER.md if needed
+                                .purpose(config != null ? config.getPurpose() : null)
                                 .status(agent.getStatus())
                                 .createdAt(agent.getCreatedAt())
                                 .lastActiveAt(agent.getLastActiveAt())
@@ -134,16 +137,31 @@ public class AgentController {
                         .body(com.airepublic.t1.api.dto.ApiResponse.error("Agent '" + request.getName() + "' already exists"));
             }
 
-            // Create agent configuration if any config fields are provided
-            IndividualAgentConfig config = null;
-            if (request.getProvider() != null || request.getModel() != null || request.getContext() != null) {
-                config = new IndividualAgentConfig();
-                config.setName(request.getName());
-                config.setRole(request.getRole() != null ? request.getRole() : "AI Assistant");
-                config.setContext(request.getContext() != null ? request.getContext() : "General purpose AI assistant");
-                config.setProvider(request.getProvider());
-                config.setModel(request.getModel());
+            // Get default values from config if not provided
+            com.airepublic.t1.model.AgentConfiguration globalConfig = configManager.getConfiguration();
+            com.airepublic.t1.model.AgentConfiguration.LLMProvider defaultProvider =
+                request.getProvider() != null ? request.getProvider() : globalConfig.getDefaultProvider();
+            String defaultModel = request.getModel();
+            if (defaultModel == null) {
+                var llmConfig = globalConfig.getLlmConfigs().get(defaultProvider);
+                defaultModel = llmConfig != null ? llmConfig.getModel() : "default";
             }
+
+            // Create comprehensive agent configuration
+            IndividualAgentConfig config = new IndividualAgentConfig(
+                request.getName(),                                                              // name
+                request.getRole() != null ? request.getRole() : "General Purpose Agent",       // role
+                request.getPurpose() != null ? request.getPurpose() : "A helpful AI assistant", // purpose
+                request.getSpecialization() != null ? request.getSpecialization() : "General assistance", // specialization
+                request.getCommunicationStyle() != null ? request.getCommunicationStyle() : "Clear and concise", // style
+                request.getPersonality() != null ? request.getPersonality() : "Professional and helpful", // personality
+                request.getEmojiPreference() != null ? request.getEmojiPreference() : "sparingly", // emojiPreference
+                "active",                                                                       // status
+                java.time.LocalDateTime.now(),                                                  // createdAt
+                java.time.LocalDateTime.now(),                                                  // lastModifiedAt
+                defaultProvider,                                                                // provider
+                defaultModel                                                                    // model
+            );
 
             // Create the agent
             Agent agent = agentManager.createAgent(request.getName(), orchestrator, config);
@@ -151,22 +169,11 @@ public class AgentController {
             // Create agent folder
             agentConfigService.createAgentFolder(request.getName());
 
-            // Create CHARACTER.md with provided information
-            Map<String, String> hatchData = new HashMap<>();
-            hatchData.put("agent_role", request.getRole() != null ? request.getRole() : "AI Assistant");
-            hatchData.put("agent_purpose", request.getPurpose() != null ? request.getPurpose() : "General purpose assistance");
-            hatchData.put("agent_personality", request.getPersonality() != null ? request.getPersonality() : "Professional and helpful");
-            hatchData.put("communication_style", request.getCommunicationStyle() != null ? request.getCommunicationStyle() : "Clear and concise");
-            hatchData.put("specialties", request.getSpecialties() != null ? request.getSpecialties() : "General AI assistance");
-            hatchData.put("constraints", request.getConstraints() != null ? request.getConstraints() : "None specified");
+            // Create CHARACTER.md with full configuration
+            agentConfigService.createCharacterMd(config, AgentConfigService.getCharacterBehaviorTemplate());
 
-            agentConfigService.createCharacterMd(request.getName(), hatchData);
-
-            // If config was created, save it and create USAGE.md
-            if (config != null) {
-                agentConfigService.saveAgentConfig(config);
-                agentConfigService.createUsageMd(request.getName(), config);
-            }
+            // Create USAGE.md
+            agentConfigService.createUsageMd(request.getName(), config);
 
             AgentInfo agentInfo = AgentInfo.builder()
                     .name(agent.getName())
@@ -239,12 +246,11 @@ public class AgentController {
                     .conversationCount(agent.getConversationHistory().size())
                     .isCurrentAgent(agent.getName().equals(currentAgentName))
                     .role(config != null ? config.getRole() : null)
-                    .purpose(purpose)
-                    .personality(personality)
-                    .communicationStyle(communicationStyle)
-                    .specialties(specialties)
+                    .purpose(purpose != null ? purpose : (config != null ? config.getPurpose() : null))
+                    .personality(personality != null ? personality : (config != null ? config.getPersonality() : null))
+                    .communicationStyle(communicationStyle != null ? communicationStyle : (config != null ? config.getStyle() : null))
+                    .specialties(specialties != null ? specialties : (config != null ? config.getSpecialization() : null))
                     .constraints(constraints)
-                    .context(config != null ? config.getContext() : null)
                     .provider(config != null ? config.getProvider() : null)
                     .model(config != null ? config.getModel() : null)
                     .build();
@@ -449,8 +455,20 @@ public class AgentController {
             if (request.getRole() != null) {
                 config.setRole(request.getRole());
             }
-            if (request.getContext() != null) {
-                config.setContext(request.getContext());
+            if (request.getPurpose() != null) {
+                config.setPurpose(request.getPurpose());
+            }
+            if (request.getSpecialization() != null) {
+                config.setSpecialization(request.getSpecialization());
+            }
+            if (request.getPersonality() != null) {
+                config.setPersonality(request.getPersonality());
+            }
+            if (request.getCommunicationStyle() != null) {
+                config.setStyle(request.getCommunicationStyle());
+            }
+            if (request.getEmojiPreference() != null) {
+                config.setEmojiPreference(request.getEmojiPreference());
             }
             if (request.getProvider() != null) {
                 config.setProvider(request.getProvider());
@@ -459,11 +477,14 @@ public class AgentController {
                 config.setModel(request.getModel());
             }
 
+            // Update timestamp
+            config.updateLastModified();
+
             // Update the agent's configuration in memory
             Agent updatedAgent = agentManager.updateAgentConfig(name, config);
 
-            // Persist to disk
-            agentConfigService.saveAgentConfig(config);
+            // Persist to disk (updates CHARACTER.md)
+            agentConfigService.updateCharacterMd(config);
 
             // Build response
             String currentAgentName = agentManager.getCurrentAgentName();

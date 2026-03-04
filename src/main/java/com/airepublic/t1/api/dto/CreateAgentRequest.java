@@ -38,7 +38,13 @@ public class CreateAgentRequest {
     @Schema(description = "Areas of specialization and expertise",
             example = "Java, Spring Boot, REST APIs, database design, unit testing, and code optimization",
             required = false)
-    private String specialties;
+    private String specialization;
+
+    @Schema(description = "Emoji usage preference",
+            example = "sparingly",
+            allowableValues = {"freely", "sparingly", "none"},
+            required = false)
+    private String emojiPreference;
 
     @Schema(description = "Constraints, limitations, or guidelines",
             example = "Does not write production database queries without explicit approval. Always suggests security best practices.",

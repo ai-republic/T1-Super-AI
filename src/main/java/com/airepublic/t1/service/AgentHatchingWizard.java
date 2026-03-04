@@ -1,16 +1,18 @@
 package com.airepublic.t1.service;
 
-import com.airepublic.t1.config.AgentConfigService;
-import com.airepublic.t1.model.AgentConfiguration.LLMProvider;
-import com.airepublic.t1.model.IndividualAgentConfig;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
+
+import org.springframework.stereotype.Service;
+
+import com.airepublic.t1.config.AgentConfigService;
+import com.airepublic.t1.model.AgentConfiguration.LLMProvider;
+import com.airepublic.t1.model.IndividualAgentConfig;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * Interactive wizard for creating new agents through a hatching process.
@@ -25,7 +27,7 @@ public class AgentHatchingWizard {
     /**
      * Run the complete hatching wizard for a new agent
      */
-    public HatchResult runHatchingProcess(String agentName, LLMProvider defaultProvider, String defaultModel) {
+    public HatchResult runHatchingProcess(final String agentName, final LLMProvider defaultProvider, final String defaultModel) {
         try {
             System.out.println("\n🥚 ═══════════════════════════════════════════════════");
             System.out.println("   AGENT HATCHING PROCESS");
@@ -39,21 +41,19 @@ public class AgentHatchingWizard {
             agentConfigService.createAgentFolder(agentName);
 
             // Collect hatching data
-            Map<String, String> hatchData = collectHatchingData();
+            final Map<String, String> hatchData = collectHatchingData();
 
             // Create agent configuration
-            IndividualAgentConfig config = createAgentConfig(
-                agentName,
-                hatchData,
-                defaultProvider,
-                defaultModel
-            );
+            final IndividualAgentConfig config = createAgentConfig(
+                    agentName,
+                    hatchData,
+                    defaultProvider,
+                    defaultModel
+                    );
 
-            // Save configuration
-            agentConfigService.saveAgentConfig(config);
 
             // Create CHARACTER.md
-            agentConfigService.createCharacterMd(agentName, hatchData);
+            agentConfigService.createCharacterMd(config, AgentConfigService.getCharacterBehaviorTemplate());
 
             // Create USAGE.md
             agentConfigService.createUsageMd(agentName, config);
@@ -72,7 +72,7 @@ public class AgentHatchingWizard {
 
             return new HatchResult(true, config, hatchData);
 
-        } catch (Exception e) {
+        } catch (final Exception e) {
             log.error("Error during hatching process", e);
             System.err.println("\n❌ Error during hatching: " + e.getMessage());
             return new HatchResult(false, null, null);
@@ -83,8 +83,8 @@ public class AgentHatchingWizard {
      * Collect hatching data through interactive prompts
      */
     private Map<String, String> collectHatchingData() {
-        Map<String, String> data = new HashMap<>();
-        Scanner scanner = new Scanner(System.in);
+        final Map<String, String> data = new HashMap<>();
+        final Scanner scanner = new Scanner(System.in);
 
         try {
             // Agent Role
@@ -107,9 +107,19 @@ public class AgentHatchingWizard {
             System.out.flush();
             data.put("agent_purpose", readLine(scanner, "General purpose assistance"));
 
+            // Agent Purpose
+            System.out.println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            System.out.println("STEP 3: Define Specialization");
+            System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+            System.out.println("What are this agent's areas of expertise?");
+            System.out.println("Examples: Java Spring Boot, Python data science, AWS infrastructure");
+            System.out.print("\n→ Specialties (or Enter to skip): ");
+            System.out.flush();
+            data.put("agent_specialization", readLine(scanner, "General purpose assistance"));
+
             // Agent Personality
             System.out.println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            System.out.println("STEP 3: Define Personality");
+            System.out.println("STEP 4: Define Personality");
             System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             System.out.println("Describe the agent's personality traits.");
             System.out.println("Examples: Thorough and detail-oriented, Encouraging and supportive");
@@ -119,23 +129,13 @@ public class AgentHatchingWizard {
 
             // Communication Style
             System.out.println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            System.out.println("STEP 4: Communication Style");
+            System.out.println("STEP 5: Communication Style");
             System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
             System.out.println("How should the agent communicate?");
             System.out.println("Examples: Technical and precise, Friendly and casual, Formal and detailed");
             System.out.print("\n→ Style: ");
             System.out.flush();
             data.put("communication_style", readLine(scanner, "Clear and concise"));
-
-            // Specialties
-            System.out.println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            System.out.println("STEP 5: Specialties (Optional)");
-            System.out.println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-            System.out.println("What are this agent's areas of expertise?");
-            System.out.println("Examples: Java Spring Boot, Python data science, AWS infrastructure");
-            System.out.print("\n→ Specialties (or Enter to skip): ");
-            System.out.flush();
-            data.put("specialties", readLine(scanner, "General software development"));
 
             // Constraints
             System.out.println("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
@@ -159,29 +159,29 @@ public class AgentHatchingWizard {
      * Create agent configuration from hatching data
      */
     private IndividualAgentConfig createAgentConfig(
-            String agentName,
-            Map<String, String> hatchData,
-            LLMProvider provider,
-            String model) {
+            final String agentName,
+            final Map<String, String> hatchData,
+            final LLMProvider provider,
+            final String model) {
 
-        String role = hatchData.get("agent_role");
-        String purpose = hatchData.get("agent_purpose");
+        final String role = hatchData.get("agent_role");
+        final String purpose = hatchData.get("agent_purpose");
+        final String specialization = hatchData.getOrDefault("agent_specialization", "General software development");
+        final String personality = hatchData.get("agent_personality");
+        final String style = hatchData.get("communication_style");
+        final String emojiPreference = hatchData.getOrDefault("emoji_preference", "sparingly");
 
-        return new IndividualAgentConfig(
-            agentName,
-            role,
-            purpose,
-            provider,
-            model
-        );
+        final IndividualAgentConfig config = new IndividualAgentConfig(agentName, role, purpose, specialization, style, personality, emojiPreference, "active", LocalDateTime.now(), LocalDateTime.now(), provider, model);
+
+        return config;
     }
 
     /**
      * Read a line with default value
      */
-    private String readLine(Scanner scanner, String defaultValue) {
+    private String readLine(final Scanner scanner, final String defaultValue) {
         if (scanner.hasNextLine()) {
-            String input = scanner.nextLine();
+            final String input = scanner.nextLine();
             if (input == null || input.trim().isEmpty()) {
                 return defaultValue;
             }
@@ -198,7 +198,7 @@ public class AgentHatchingWizard {
         private final IndividualAgentConfig config;
         private final Map<String, String> hatchData;
 
-        public HatchResult(boolean success, IndividualAgentConfig config, Map<String, String> hatchData) {
+        public HatchResult(final boolean success, final IndividualAgentConfig config, final Map<String, String> hatchData) {
             this.success = success;
             this.config = config;
             this.hatchData = hatchData;
