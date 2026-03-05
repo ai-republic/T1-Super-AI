@@ -1,7 +1,7 @@
 package com.airepublic.t1.service;
 
 import java.io.IOException;
-import java.nio.file.Path;
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -12,7 +12,10 @@ import org.springframework.stereotype.Service;
 import com.airepublic.t1.agent.AgentManager;
 import com.airepublic.t1.agent.AgentOrchestrator;
 import com.airepublic.t1.config.AgentConfigService;
+import com.airepublic.t1.config.AgentConfigurationManager;
 import com.airepublic.t1.config.WorkspaceInitializer;
+import com.airepublic.t1.model.AgentConfiguration;
+import com.airepublic.t1.model.IndividualAgentConfig;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -24,16 +27,19 @@ import lombok.extern.slf4j.Slf4j;
 public class HatchingService {
     private final WorkspaceInitializer workspaceInitializer;
     private final AgentConfigService agentConfigService;
+    private final AgentConfigurationManager configManager;
     private final AgentManager agentManager;
     private final AgentOrchestrator orchestrator;
     private ChatModel chatModel;
 
     public HatchingService(final WorkspaceInitializer workspaceInitializer,
             final AgentConfigService agentConfigService,
+            final AgentConfigurationManager configManager,
             final AgentManager agentManager,
             final AgentOrchestrator orchestrator) {
         this.workspaceInitializer = workspaceInitializer;
         this.agentConfigService = agentConfigService;
+        this.configManager = configManager;
         this.agentManager = agentManager;
         this.orchestrator = orchestrator;
         // ChatModel will be set later when available
@@ -45,59 +51,8 @@ public class HatchingService {
     }
 
     /**
-     * Run the HATCH process interactively
-     * This is called on first run when CHARACTER.md doesn't exist
-     */
-    public void runHatchProcess() {
-        try {
-            log.info("🥚 Starting HATCH process - configuring your AI agent");
-
-            if (chatModel == null) {
-                log.warn("⚠️ ChatModel not available yet - HATCH process will run when LLM is configured");
-                return;
-            }
-
-            // Read HATCH.md content
-            final String hatchContent = workspaceInitializer.readHatchMd();
-            if (hatchContent == null) {
-                log.error("HATCH.md not found - cannot run setup");
-                return;
-            }
-
-            // Create system prompt for hatching
-            final String systemPrompt = buildHatchSystemPrompt();
-
-            // Use LLM to conduct the interview
-            log.info("🤖 Initiating conversation with user to gather configuration...");
-
-            final ChatClient chatClient = ChatClient.builder(chatModel).build();
-
-            final String hatchPrompt = String.format(
-                    "I need to configure this T1 Super AI for the user. " +
-                            "Please read the HATCH.md guide below and help me gather the necessary information " +
-                            "from the user to create their CHARACTER.md profile.\n\n" +
-                            "HATCH Guide:\n%s\n\n" +
-                            "Please start by greeting the user and explaining that we're setting up their AI agent. " +
-                            "Then ask the questions from Step 1 (About You). " +
-                            "After collecting all information, I'll create their CHARACTER.md file.\n\n" +
-                            "Important: Be friendly, conversational, and guide them through each step. " +
-                            "Don't ask all questions at once - have a natural conversation.",
-                            hatchContent
-                    );
-
-            // This would be an interactive process in a real implementation
-            // For now, we'll create a minimal CHARACTER.md
-            log.info("📝 HATCH process requires interactive session");
-            log.info("💡 Tip: User should interact with the agent to complete setup");
-
-        } catch (final Exception e) {
-            log.error("Error during HATCH process", e);
-        }
-    }
-
-    /**
      * Process HATCH responses and create USER.md and initial agent
-     * This is called when the user has provided all answers
+     * This is called when the user has provided all answers via the CLI wizard
      */
     public void completeHatchProcess(final Map<String, String> responses) {
         try {
@@ -127,16 +82,14 @@ public class HatchingService {
 
             // Create initial agent in agents folder
             agentConfigService.createAgentFolder(agentName);
-            final Path agentFolder = agentConfigService.getAgentFolder(agentName);
 
             // Extract provider and model from responses or use defaults
-            final String providerStr = responses.getOrDefault("provider", "openai");
-            final String model = responses.getOrDefault("model", "gpt-4");
-            final com.airepublic.t1.model.AgentConfiguration.LLMProvider provider =
-                    com.airepublic.t1.model.AgentConfiguration.LLMProvider.valueOf(providerStr.toUpperCase());
+            final AgentConfiguration agentConfiguration = configManager.getConfiguration();
+            final AgentConfiguration.LLMProvider provider = agentConfiguration.getDefaultProvider();
+            final String model = agentConfiguration.getLlmConfigs().get(provider).getModel();
 
             // Create full agent configuration
-            final com.airepublic.t1.model.IndividualAgentConfig config = new com.airepublic.t1.model.IndividualAgentConfig(
+            final IndividualAgentConfig config = new IndividualAgentConfig(
                     agentName,                                          // name
                     agentRole,                                          // role
                     agentPurpose,                                       // purpose
@@ -145,14 +98,14 @@ public class HatchingService {
                     personality,                                        // personality
                     emojiPreference,                                    // emojiPreference
                     "active",                                           // status
-                    java.time.LocalDateTime.now(),                      // createdAt
-                    java.time.LocalDateTime.now(),                      // lastModifiedAt
+                    LocalDateTime.now(), // createdAt
+                    LocalDateTime.now(), // lastModifiedAt
                     provider,                                           // provider
                     model                                               // model
-            );
+                    );
 
             // Create CHARACTER.md for the agent
-            agentConfigService.createCharacterMd(config, com.airepublic.t1.config.AgentConfigService.getCharacterBehaviorTemplate());
+            agentConfigService.createCharacterMd(config, AgentConfigService.getCharacterBehaviorTemplate());
             log.info("📄 Created CHARACTER.md for agent '{}'", agentName);
 
             // Create USAGE.md for the agent
@@ -246,19 +199,6 @@ public class HatchingService {
         }
 
         return data;
-    }
-
-    /**
-     * Build system prompt for HATCH process
-     */
-    private String buildHatchSystemPrompt() {
-        return "You are helping set up an T1 Super AI for a new user. " +
-                "Your role is to guide them through the initial configuration process " +
-                "by asking questions from the HATCH.md guide. " +
-                "Be friendly, patient, and conversational. " +
-                "After gathering all information, you'll help create their CHARACTER.md profile. " +
-                "The CHARACTER.md will be loaded as context in every future session, " +
-                "so make sure to capture the user's preferences accurately.";
     }
 
     /**

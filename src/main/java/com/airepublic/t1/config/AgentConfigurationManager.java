@@ -1,24 +1,25 @@
 package com.airepublic.t1.config;
 
-// Removed unused InteractiveConfigCLI import
-import com.airepublic.t1.model.AgentConfiguration;
-import com.airepublic.t1.model.AgentConfiguration.LLMConfig;
-import com.airepublic.t1.model.AgentConfiguration.LLMProvider;
-import com.airepublic.t1.model.AgentConfiguration.MCPServerConfig;
-import com.airepublic.t1.model.AgentConfiguration.TaskType;
-import com.airepublic.t1.model.AgentConfiguration.TaskModelConfig;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.ApplicationContext;
-import org.springframework.stereotype.Component;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Scanner;
+
+import org.springframework.stereotype.Component;
+
+// Removed unused InteractiveConfigCLI import
+import com.airepublic.t1.model.AgentConfiguration;
+import com.airepublic.t1.model.AgentConfiguration.LLMConfig;
+import com.airepublic.t1.model.AgentConfiguration.LLMProvider;
+import com.airepublic.t1.model.AgentConfiguration.MCPServerConfig;
+import com.airepublic.t1.model.AgentConfiguration.TaskModelConfig;
+import com.airepublic.t1.model.AgentConfiguration.TaskType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Component
@@ -29,12 +30,9 @@ public class AgentConfigurationManager {
     private static final String CONFIG_FILE = CONFIG_PATH.resolve("config.json").toString();
     private final ObjectMapper objectMapper;
     private AgentConfiguration configuration;
-    private final ApplicationContext applicationContext;
 
-    public AgentConfigurationManager(ApplicationContext applicationContext) {
-        this.applicationContext = applicationContext;
-        this.objectMapper = new ObjectMapper()
-                .enable(SerializationFeature.INDENT_OUTPUT);
+    public AgentConfigurationManager() {
+        objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
         loadConfiguration();
     }
 
@@ -48,14 +46,14 @@ public class AgentConfigurationManager {
 
     public void loadConfiguration() {
         try {
-            File configFile = new File(CONFIG_FILE);
+            final File configFile = new File(CONFIG_FILE);
             if (configFile.exists()) {
                 configuration = objectMapper.readValue(configFile, AgentConfiguration.class);
                 log.info("Configuration loaded from {}", CONFIG_FILE);
             } else {
                 configuration = new AgentConfiguration();
             }
-        } catch (IOException e) {
+        } catch (final IOException e) {
             log.error("Error loading configuration", e);
             configuration = new AgentConfiguration();
         }
@@ -63,20 +61,20 @@ public class AgentConfigurationManager {
 
     public void saveConfiguration() {
         try {
-            Path configDir = Paths.get(CONFIG_DIR);
+            final Path configDir = Paths.get(CONFIG_DIR);
             if (!Files.exists(configDir)) {
                 Files.createDirectories(configDir);
             }
             objectMapper.writeValue(new File(CONFIG_FILE), configuration);
             log.info("Configuration saved to {}", CONFIG_FILE);
-        } catch (IOException e) {
+        } catch (final IOException e) {
             log.error("Error saving configuration", e);
         }
     }
 
     public void runConfigurationWizard() {
         // Use Scanner-based wizard for configuration
-        Scanner scanner = new Scanner(System.in);
+        final Scanner scanner = new Scanner(System.in);
 
         System.out.println("\n╔════════════════════════════════════════════════════╗");
         System.out.println("║  🤖 T1 Super AI Configuration Wizard 🛠️        ║");
@@ -90,7 +88,7 @@ public class AgentConfigurationManager {
         System.out.println("  3. 🦙 Ollama");
         System.out.println("  4. ⭐ All of the above");
 
-        String providerInput = readNonEmptyString(scanner, "\n📝 Enter your choice (e.g., 1,2 or 4): ");
+        final String providerInput = readNonEmptyString(scanner, "\n📝 Enter your choice (e.g., 1,2 or 4): ");
 
         // Parse provider selection
         boolean configureOpenAI = false;
@@ -104,10 +102,10 @@ public class AgentConfigurationManager {
             configureOllama = true;
         } else {
             // Parse comma-separated values
-            String[] selections = providerInput.split(",");
-            for (String sel : selections) {
+            final String[] selections = providerInput.split(",");
+            for (final String sel : selections) {
                 try {
-                    int choice = Integer.parseInt(sel.trim());
+                    final int choice = Integer.parseInt(sel.trim());
                     switch (choice) {
                         case 1: configureOpenAI = true; break;
                         case 2: configureAnthropic = true; break;
@@ -120,7 +118,7 @@ public class AgentConfigurationManager {
                         default:
                             System.out.println("⚠️  Invalid choice: " + choice + " (ignored)");
                     }
-                } catch (NumberFormatException e) {
+                } catch (final NumberFormatException e) {
                     System.out.println("⚠️  Invalid input: " + sel + " (ignored)");
                 }
             }
@@ -132,18 +130,24 @@ public class AgentConfigurationManager {
         }
 
         System.out.println("\n✅ Selected providers:");
-        if (configureOpenAI) System.out.println("  • OpenAI");
-        if (configureAnthropic) System.out.println("  • Anthropic");
-        if (configureOllama) System.out.println("  • Ollama");
+        if (configureOpenAI) {
+            System.out.println("  • OpenAI");
+        }
+        if (configureAnthropic) {
+            System.out.println("  • Anthropic");
+        }
+        if (configureOllama) {
+            System.out.println("  • Ollama");
+        }
 
         // Configure OpenAI
         if (configureOpenAI) {
             System.out.println("\n🟢 ─── OpenAI Configuration ───");
-            String apiKey = readNonEmptyString(scanner, "🔑 Enter OpenAI API Key: ");
-            String model = readStringWithDefault(scanner,
-                "🎯 Enter model name (default: gpt-4o): ", "gpt-4o");
+            final String apiKey = readNonEmptyString(scanner, "🔑 Enter OpenAI API Key: ");
+            final String model = readStringWithDefault(scanner,
+                    "🎯 Enter model name (default: gpt-4o): ", "gpt-4o");
 
-            LLMConfig openAIConfig = new LLMConfig();
+            final LLMConfig openAIConfig = new LLMConfig();
             openAIConfig.setApiKey(apiKey);
             openAIConfig.setModel(model);
             openAIConfig.setBaseUrl("https://api.openai.com/v1");
@@ -154,12 +158,12 @@ public class AgentConfigurationManager {
         // Configure Anthropic
         if (configureAnthropic) {
             System.out.println("\n🟣 ─── Anthropic Configuration ───");
-            String apiKey = readNonEmptyString(scanner, "🔑 Enter Anthropic API Key: ");
-            String model = readStringWithDefault(scanner,
-                "🎯 Enter model name (default: claude-3-5-sonnet-20241022): ",
-                "claude-3-5-sonnet-20241022");
+            final String apiKey = readNonEmptyString(scanner, "🔑 Enter Anthropic API Key: ");
+            final String model = readStringWithDefault(scanner,
+                    "🎯 Enter model name (default: claude-3-5-sonnet-20241022): ",
+                    "claude-3-5-sonnet-20241022");
 
-            LLMConfig anthropicConfig = new LLMConfig();
+            final LLMConfig anthropicConfig = new LLMConfig();
             anthropicConfig.setApiKey(apiKey);
             anthropicConfig.setModel(model);
             anthropicConfig.setBaseUrl("https://api.anthropic.com");
@@ -170,13 +174,13 @@ public class AgentConfigurationManager {
         // Configure Ollama
         if (configureOllama) {
             System.out.println("\n🦙 ─── Ollama Configuration ───");
-            String baseUrl = readStringWithDefault(scanner,
-                "🌐 Enter Ollama base URL (default: http://localhost:11434): ",
-                "http://localhost:11434");
-            String model = readStringWithDefault(scanner,
-                "🎯 Enter model name (default: llama3.2): ", "llama3.2");
+            final String baseUrl = readStringWithDefault(scanner,
+                    "🌐 Enter Ollama base URL (default: http://localhost:11434): ",
+                    "http://localhost:11434");
+            final String model = readStringWithDefault(scanner,
+                    "🎯 Enter model name (default: llama3.2): ", "llama3.2");
 
-            LLMConfig ollamaConfig = new LLMConfig();
+            final LLMConfig ollamaConfig = new LLMConfig();
             ollamaConfig.setBaseUrl(baseUrl);
             ollamaConfig.setModel(model);
             configuration.getLlmConfigs().put(LLMProvider.OLLAMA, ollamaConfig);
@@ -186,13 +190,19 @@ public class AgentConfigurationManager {
         // Set default provider
         System.out.println("\n⭐ ─── Default Provider ───");
         int providerIndex = 1;
-        if (configureOpenAI) System.out.println("  " + providerIndex++ + ". 🟢 OpenAI");
-        if (configureAnthropic) System.out.println("  " + providerIndex++ + ". 🟣 Anthropic");
-        if (configureOllama) System.out.println("  " + providerIndex++ + ". 🦙 Ollama");
+        if (configureOpenAI) {
+            System.out.println("  " + providerIndex++ + ". 🟢 OpenAI");
+        }
+        if (configureAnthropic) {
+            System.out.println("  " + providerIndex++ + ". 🟣 Anthropic");
+        }
+        if (configureOllama) {
+            System.out.println("  " + providerIndex++ + ". 🦙 Ollama");
+        }
 
-        int maxChoice = providerIndex - 1;
-        int defaultChoice = readIntWithValidation(scanner,
-            "📌 Select default provider (1-" + maxChoice + "): ", 1, maxChoice);
+        final int maxChoice = providerIndex - 1;
+        final int defaultChoice = readIntWithValidation(scanner,
+                "📌 Select default provider (1-" + maxChoice + "): ", 1, maxChoice);
 
         // Map choice to provider
         int currentIndex = 1;
@@ -209,8 +219,8 @@ public class AgentConfigurationManager {
         System.out.println("\n🎯 ─── Task-Specific Model Configuration ───");
         System.out.println("Configure different models for different task types");
         System.out.println("Organized by category for easier configuration\n");
-        boolean configureTaskModels = readYesNo(scanner,
-            "💡 Do you want to configure task-specific models? (y/n, default: y): ", true);
+        final boolean configureTaskModels = readYesNo(scanner,
+                "💡 Do you want to configure task-specific models? (y/n, default: y): ", true);
 
         if (configureTaskModels) {
             // Group 1: Text & Reasoning Tasks
@@ -248,24 +258,24 @@ public class AgentConfigurationManager {
         // MCP Servers
         System.out.println("\n🔌 ─── MCP Servers (Model Context Protocol) ───");
         boolean configureMCP = readYesNo(scanner,
-            "💬 Do you want to configure MCP servers? (y/n): ", false);
+                "💬 Do you want to configure MCP servers? (y/n): ", false);
 
         while (configureMCP) {
-            MCPServerConfig mcpConfig = new MCPServerConfig();
+            final MCPServerConfig mcpConfig = new MCPServerConfig();
 
-            String name = readNonEmptyString(scanner, "📛 Enter MCP server name: ");
+            final String name = readNonEmptyString(scanner, "📛 Enter MCP server name: ");
             mcpConfig.setName(name);
 
-            String transport = readStringWithValidation(scanner,
-                "🚀 Enter transport type (stdio/http): ",
-                new String[]{"stdio", "http"});
+            final String transport = readStringWithValidation(scanner,
+                    "🚀 Enter transport type (stdio/http): ",
+                    new String[]{"stdio", "http"});
             mcpConfig.setTransport(transport);
 
             if ("stdio".equalsIgnoreCase(transport)) {
-                String command = readNonEmptyString(scanner, "⚙️  Enter command to start server: ");
+                final String command = readNonEmptyString(scanner, "⚙️  Enter command to start server: ");
                 mcpConfig.setCommand(command);
             } else {
-                String url = readNonEmptyString(scanner, "🌐 Enter server URL: ");
+                final String url = readNonEmptyString(scanner, "🌐 Enter server URL: ");
                 mcpConfig.setUrl(url);
             }
 
@@ -278,16 +288,16 @@ public class AgentConfigurationManager {
         // System Settings
         System.out.println("\n🔒 ─── System Settings ───");
 
-        boolean enableFS = readYesNo(scanner,
-            "📁 Enable file system access? (y/n, default: y): ", true);
+        final boolean enableFS = readYesNo(scanner,
+                "📁 Enable file system access? (y/n, default: y): ", true);
         configuration.getSystemSettings().setEnableFileSystem(enableFS);
 
-        boolean enableWeb = readYesNo(scanner,
-            "🌐 Enable web access? (y/n, default: y): ", true);
+        final boolean enableWeb = readYesNo(scanner,
+                "🌐 Enable web access? (y/n, default: y): ", true);
         configuration.getSystemSettings().setEnableWebAccess(enableWeb);
 
-        boolean enableBash = readYesNo(scanner,
-            "💻 Enable bash execution? (y/n, default: y): ", true);
+        final boolean enableBash = readYesNo(scanner,
+                "💻 Enable bash execution? (y/n, default: y): ", true);
         configuration.getSystemSettings().setEnableBashExecution(enableBash);
 
         saveConfiguration();
@@ -301,22 +311,28 @@ public class AgentConfigurationManager {
 
     // ========== Task Configuration Helper Method ==========
 
-    private void configureTaskType(Scanner scanner, TaskType taskType,
-                                   boolean configureOpenAI, boolean configureAnthropic, boolean configureOllama) {
+    private void configureTaskType(final Scanner scanner, final TaskType taskType,
+            final boolean configureOpenAI, final boolean configureAnthropic, final boolean configureOllama) {
         System.out.println("\n📋 " + taskType.getDisplayName() + " - " + taskType.getDescription());
 
         // Show available providers
         int providerIdx = 1;
         System.out.println("Available providers:");
-        if (configureOpenAI) System.out.println("  " + providerIdx++ + ". 🟢 OpenAI");
-        if (configureAnthropic) System.out.println("  " + providerIdx++ + ". 🟣 Anthropic");
-        if (configureOllama) System.out.println("  " + providerIdx++ + ". 🦙 Ollama");
+        if (configureOpenAI) {
+            System.out.println("  " + providerIdx++ + ". 🟢 OpenAI");
+        }
+        if (configureAnthropic) {
+            System.out.println("  " + providerIdx++ + ". 🟣 Anthropic");
+        }
+        if (configureOllama) {
+            System.out.println("  " + providerIdx++ + ". 🦙 Ollama");
+        }
         System.out.println("  " + providerIdx + ". ⏭️  Skip (use default provider)");
 
-        int maxProviderChoice = providerIdx;
-        int providerChoice = readIntWithValidation(scanner,
-            "🔧 Select provider for " + taskType.getDisplayName() + " (1-" + maxProviderChoice + "): ",
-            1, maxProviderChoice);
+        final int maxProviderChoice = providerIdx;
+        final int providerChoice = readIntWithValidation(scanner,
+                "🔧 Select provider for " + taskType.getDisplayName() + " (1-" + maxProviderChoice + "): ",
+                1, maxProviderChoice);
 
         // Skip if user chooses to use default
         if (providerChoice == maxProviderChoice) {
@@ -336,26 +352,26 @@ public class AgentConfigurationManager {
         }
 
         if (selectedProvider != null) {
-            LLMConfig llmConfig = configuration.getLlmConfigs().get(selectedProvider);
-            String defaultModel = llmConfig != null ? llmConfig.getModel() : "";
+            final LLMConfig llmConfig = configuration.getLlmConfigs().get(selectedProvider);
+            final String defaultModel = llmConfig != null ? llmConfig.getModel() : "";
 
             // Provide model suggestions based on task type
-            String modelSuggestion = getModelSuggestion(taskType, selectedProvider);
+            final String modelSuggestion = getModelSuggestion(taskType, selectedProvider);
             if (!modelSuggestion.isEmpty()) {
                 System.out.println("💡 Suggested model: " + modelSuggestion);
             }
 
-            String model = readStringWithDefault(scanner,
-                "🎯 Enter model name (default: " + defaultModel + "): ", defaultModel);
+            final String model = readStringWithDefault(scanner,
+                    "🎯 Enter model name (default: " + defaultModel + "): ", defaultModel);
 
-            TaskModelConfig taskConfig = new TaskModelConfig(selectedProvider, model);
+            final TaskModelConfig taskConfig = new TaskModelConfig(selectedProvider, model);
             configuration.getTaskModels().put(taskType, taskConfig);
             System.out.println("✅ " + taskType.getDisplayName() + " configured with " +
-                selectedProvider + " - " + model);
+                    selectedProvider + " - " + model);
         }
     }
 
-    private String getModelSuggestion(TaskType taskType, LLMProvider provider) {
+    private String getModelSuggestion(final TaskType taskType, final LLMProvider provider) {
         return switch (taskType) {
             case SPEECH_TO_TEXT -> switch (provider) {
                 case OPENAI -> "whisper-1";
@@ -390,26 +406,26 @@ public class AgentConfigurationManager {
 
     // ========== Validation Helper Methods ==========
 
-    private int readIntWithValidation(Scanner scanner, String prompt, int min, int max) {
+    private int readIntWithValidation(final Scanner scanner, final String prompt, final int min, final int max) {
         while (true) {
             System.out.print(prompt);
             try {
-                String input = scanner.nextLine().trim();
-                int value = Integer.parseInt(input);
+                final String input = scanner.nextLine().trim();
+                final int value = Integer.parseInt(input);
                 if (value >= min && value <= max) {
                     return value;
                 }
                 System.out.println("❌ Please enter a number between " + min + " and " + max);
-            } catch (NumberFormatException e) {
+            } catch (final NumberFormatException e) {
                 System.out.println("❌ Invalid input. Please enter a number between " + min + " and " + max);
             }
         }
     }
 
-    private String readNonEmptyString(Scanner scanner, String prompt) {
+    private String readNonEmptyString(final Scanner scanner, final String prompt) {
         while (true) {
             System.out.print(prompt);
-            String input = scanner.nextLine().trim();
+            final String input = scanner.nextLine().trim();
             if (!input.isEmpty()) {
                 return input;
             }
@@ -417,17 +433,17 @@ public class AgentConfigurationManager {
         }
     }
 
-    private String readStringWithDefault(Scanner scanner, String prompt, String defaultValue) {
+    private String readStringWithDefault(final Scanner scanner, final String prompt, final String defaultValue) {
         System.out.print(prompt);
-        String input = scanner.nextLine().trim();
+        final String input = scanner.nextLine().trim();
         return input.isEmpty() ? defaultValue : input;
     }
 
-    private String readStringWithValidation(Scanner scanner, String prompt, String[] validValues) {
+    private String readStringWithValidation(final Scanner scanner, final String prompt, final String[] validValues) {
         while (true) {
             System.out.print(prompt);
-            String input = scanner.nextLine().trim().toLowerCase();
-            for (String valid : validValues) {
+            final String input = scanner.nextLine().trim().toLowerCase();
+            for (final String valid : validValues) {
                 if (valid.equalsIgnoreCase(input)) {
                     return input;
                 }
@@ -436,10 +452,10 @@ public class AgentConfigurationManager {
         }
     }
 
-    private boolean readYesNo(Scanner scanner, String prompt, boolean defaultValue) {
+    private boolean readYesNo(final Scanner scanner, final String prompt, final boolean defaultValue) {
         while (true) {
             System.out.print(prompt);
-            String input = scanner.nextLine().trim().toLowerCase();
+            final String input = scanner.nextLine().trim().toLowerCase();
 
             if (input.isEmpty()) {
                 return defaultValue;
@@ -455,14 +471,14 @@ public class AgentConfigurationManager {
         }
     }
 
-    public void updateProvider(LLMProvider provider) {
+    public void updateProvider(final LLMProvider provider) {
         configuration.setDefaultProvider(provider);
         saveConfiguration();
     }
 
-    public void updateModel(String model) {
-        LLMProvider currentProvider = configuration.getDefaultProvider();
-        LLMConfig llmConfig = configuration.getLlmConfigs().get(currentProvider);
+    public void updateModel(final String model) {
+        final LLMProvider currentProvider = configuration.getDefaultProvider();
+        final LLMConfig llmConfig = configuration.getLlmConfigs().get(currentProvider);
 
         if (llmConfig == null) {
             throw new IllegalStateException("Current provider " + currentProvider + " is not configured");
@@ -473,8 +489,8 @@ public class AgentConfigurationManager {
     }
 
     public String getCurrentModel() {
-        LLMProvider currentProvider = configuration.getDefaultProvider();
-        LLMConfig llmConfig = configuration.getLlmConfigs().get(currentProvider);
+        final LLMProvider currentProvider = configuration.getDefaultProvider();
+        final LLMConfig llmConfig = configuration.getLlmConfigs().get(currentProvider);
 
         if (llmConfig == null) {
             return "No model configured";

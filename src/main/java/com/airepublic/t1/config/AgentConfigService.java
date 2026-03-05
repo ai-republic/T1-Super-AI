@@ -226,8 +226,8 @@ public class AgentConfigService {
 
     public static String getUserTemplateContent() {
         return "# 👤 User Profile\n\n" +
-                "> **Status:** Active Configuration\n" +
-                "> **Last Updated:** {{TIMESTAMP}}\n\n" +
+                "**Status:** active\n" +
+                "**Last Updated:** {{TIMESTAMP}}\n\n" +
                 "## User Information\n\n" +
                 "**Name:** {{USER_NAME}}\n" +
                 "**Pronouns:** {{USER_PRONOUNS}}\n" +
@@ -242,8 +242,8 @@ public class AgentConfigService {
 
     public String getCharacterProfileTemplate() {
         return "# 🤖 Agent Character Profile\n\n" +
-                "**Status:** Active Configuration\n" +
-                "**Date Created:** {{CREATED_DATE}}\n\n" +
+                "**Status:** active\n" +
+                "**Date Created:** {{CREATED_DATE}}\n" +
                 "**Last Modified:** {{MODIFIED_DATE}}\n\n" +
                 "## 🎭 Agent Identity\n\n" +
                 "**Agent Name:** {{NAME}}\n" +
@@ -287,7 +287,7 @@ public class AgentConfigService {
         final String template = getCharacterProfileTemplate();
 
         final StringBuilder content = new StringBuilder().append(template
-                .replace("{{STATUS}}", config.getStatus() != null ? config.getStatus() : "Active Configuration")
+                .replace("{{STATUS}}", config.getStatus() != null ? config.getStatus() : "active")
                 .replace("{{CREATED_DATE}}", config.getCreatedAt() != null ? config.getCreatedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) : LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
                 .replace("{{MODIFIED_DATE}}", config.getLastModifiedAt() != null ? config.getLastModifiedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) : LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME))
                 .replace("{{NAME}}", config.getName() != null ? config.getName() : "master")
@@ -373,7 +373,7 @@ public class AgentConfigService {
 
         // Create config from parsed data
         final IndividualAgentConfig config = new IndividualAgentConfig();
-        config.setStatus(status != null ? status : "Active Configuration");
+        config.setStatus(status != null ? status : "active");
         config.setCreatedAt(dateCreated != null ? LocalDateTime.parse(dateCreated, DateTimeFormatter.ISO_LOCAL_DATE_TIME) : LocalDateTime.now());
         config.setLastModifiedAt(lastUpdated != null ? LocalDateTime.parse(lastUpdated, DateTimeFormatter.ISO_LOCAL_DATE_TIME) : LocalDateTime.now());
         config.setName(name);
