@@ -16,6 +16,7 @@ import java.util.List;
 public class ConversationMessage {
     private String role; // user, assistant, system, tool
     private String content;
+    private String agentName; // Name of the agent that sent this message (for assistant role)
     private LocalDateTime timestamp;
     @Builder.Default
     private List<ToolCall> toolCalls = new ArrayList<>();

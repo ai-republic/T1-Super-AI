@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>T1 Super AI - Agent Chat</title>
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" th:href="@{/favicon.png}">
+
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/sse.js"></script>
+
+    <!-- Marked for Markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- Highlight.js for code syntax highlighting -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <!-- Custom Styles -->
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <h1 class="app-title">
+                    <img th:src="@{/images/logo.png}" alt="T1 Super AI" class="app-logo">
+                    T1 Super AI
+                </h1>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" onclick="showConfigModal()">
+                        <span class="icon">⚙️</span>
+                        Configure
+                    </button>
+                    <button class="btn btn-secondary" onclick="showCharacterEditor()">
+                        <span class="icon">📝</span>
+                        Edit Character
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Sidebar -->
+            <aside class="sidebar">
+                <div class="sidebar-header">
+                    <h2>Agents</h2>
+                    <button class="btn btn-primary btn-sm" onclick="showCreateAgentModal()">
+                        <span class="icon">➕</span>
+                        New Agent
+                    </button>
+                </div>
+                <agent-selector></agent-selector>
+            </aside>
+
+            <!-- Chat Area -->
+            <main class="chat-area">
+                <chat-component></chat-component>
+            </main>
+        </div>
+    </div>
+
+    <!-- Configuration Modal -->
+    <div id="configModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Configuration</h2>
+                <button class="btn-close" onclick="closeConfigModal()">&times;</button>
+            </div>
+            <config-editor></config-editor>
+        </div>
+    </div>
+
+    <!-- Character Editor Modal -->
+    <div id="characterModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Character Profile</h2>
+                <button class="btn-close" onclick="closeCharacterModal()">&times;</button>
+            </div>
+            <character-editor></character-editor>
+        </div>
+    </div>
+
+    <!-- Create Agent Modal -->
+    <div id="createAgentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create New Agent</h2>
+                <button class="btn-close" onclick="closeCreateAgentModal()">&times;</button>
+            </div>
+            <create-agent-form></create-agent-form>
+        </div>
+    </div>
+
+    <!-- Web Components -->
+    <script type="module" th:src="@{/components/chat-component.js}"></script>
+    <script type="module" th:src="@{/components/agent-selector.js}"></script>
+    <script type="module" th:src="@{/components/config-editor.js}"></script>
+    <script type="module" th:src="@{/components/character-editor.js}"></script>
+    <script type="module" th:src="@{/components/create-agent-form.js}"></script>
+
+    <!-- Utilities -->
+    <script th:src="@{/js/utils.js}"></script>
+    <script th:src="@{/js/app.js}"></script>
+</body>
+</html>

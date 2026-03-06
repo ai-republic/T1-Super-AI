@@ -69,9 +69,12 @@ public class ChatController {
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter streamMessage(@RequestParam String message,
                                    @RequestParam(required = false) String agentName) {
-        SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);
+        log.debug("SSE stream request for message: {}", message.substring(0, Math.min(50, message.length())));
+        SseEmitter emitter = new SseEmitter(300000L); // 5 minute timeout
 
         executorService.execute(() -> {
+            long startTime = System.currentTimeMillis();
+
             try {
                 // Switch agent if specified
                 if (agentName != null && !agentName.isEmpty()) {
@@ -85,32 +88,56 @@ public class ChatController {
                         .name("start")
                         .data("Processing message..."));
 
-                // Process message
+                // Process message (currently blocking - need to implement streaming)
                 String response = orchestrator.processMessage(message);
 
-                // Send response in chunks
-                String[] words = response.split(" ");
-                for (int i = 0; i < words.length; i++) {
+                // Send response in chunks (7 words at a time)
+                String[] words = response.split("\\s+");
+                int chunkSize = 7;
+
+                for (int i = 0; i < words.length; i += chunkSize) {
+                    int end = Math.min(i + chunkSize, words.length);
+                    String chunk = String.join(" ", java.util.Arrays.copyOfRange(words, i, end));
+
+                    // Add space after chunk if not the last chunk
+                    if (end < words.length) {
+                        chunk += " ";
+                    }
+
                     emitter.send(SseEmitter.event()
                             .name("chunk")
-                            .data(words[i] + (i < words.length - 1 ? " " : "")));
-                    Thread.sleep(50); // Simulate streaming
+                            .data(chunk));
+
+                    Thread.sleep(50);
                 }
 
-                // Send complete event
+                // Calculate response time
+                long responseTime = System.currentTimeMillis() - startTime;
+
+                // Send complete event with JSON metadata
+                String completeData = String.format(
+                    "{\"tokensUsed\":0,\"processingTime\":%d}",
+                    responseTime
+                );
                 emitter.send(SseEmitter.event()
                         .name("complete")
-                        .data(ChatResponse.builder()
-                                .response(response)
-                                .agentName(agentManager.getCurrentAgentName())
-                                .modelUsed(configManager.getCurrentModel())
-                                .timestamp(LocalDateTime.now())
-                                .build()));
+                        .data(completeData));
 
                 emitter.complete();
+                log.debug("Stream completed in {}ms", responseTime);
 
             } catch (Exception e) {
-                log.error("Error streaming message", e);
+                log.error("Error streaming message: {}", e.getMessage());
+                try {
+                    emitter.send(SseEmitter.event()
+                            .name("chunk")
+                            .data("\n\n*Error: " + e.getMessage() + "*"));
+                    emitter.send(SseEmitter.event()
+                            .name("complete")
+                            .data("{}"));
+                } catch (Exception sendError) {
+                    log.error("Error sending error message", sendError);
+                }
                 emitter.completeWithError(e);
             }
         });

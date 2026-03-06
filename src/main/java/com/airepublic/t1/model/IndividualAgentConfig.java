@@ -23,6 +23,7 @@ public class IndividualAgentConfig {
     private String style;
     private String personality;
     private String emojiPreference;
+    private String guidelines;
     private String status;
     private LocalDateTime createdAt = LocalDateTime.now();
     private LocalDateTime lastModifiedAt = LocalDateTime.now();

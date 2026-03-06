@@ -2,6 +2,7 @@ package com.airepublic.t1;
 
 import com.airepublic.t1.config.AgentConfigurationManager;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.Banner;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -9,15 +10,13 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 
 /**
- * Main Web Application for T1 Super AI
- * This is the default application that starts the web server
- * Shares configs and services with T1SuperAiCLI but runs as separate application
+ * Standalone CLI Application for T1 Super AI
+ * This is a completely separate application from the web interface
+ * It shares the same configs and services but runs independently
  *
  * Usage:
- *   java -jar t1-super-ai.jar
- * Or use the provided launch script: run-webapp.sh / run-webapp.bat
- *
- * For CLI mode, use T1SuperAiCLI (run-cli.sh / run-cli.bat)
+ *   java -cp target/t1-super-ai-1.0.0-SNAPSHOT.jar com.airepublic.t1.T1SuperAiCLI
+ * Or use the provided launch script: run-cli.sh / run-cli.bat
  */
 @Slf4j
 @SpringBootApplication(exclude = {
@@ -37,7 +36,7 @@ import org.springframework.context.annotation.Bean;
         org.springframework.ai.model.ollama.autoconfigure.OllamaApiAutoConfiguration.class,
         org.springframework.ai.model.ollama.autoconfigure.OllamaEmbeddingAutoConfiguration.class
 })
-public class T1SuperAiApplication {
+public class T1SuperAiCLI {
 
     // ANSI color codes for console output
     private static final String GREEN = "\033[32m";
@@ -45,10 +44,14 @@ public class T1SuperAiApplication {
     private static final String RESET = "\033[0m";
 
     public static void main(String[] args) {
-        // Set webapp mode flag
-        System.setProperty("t1.mode", "webapp");
+        // Create standalone CLI application without web server
+        SpringApplication app = new SpringApplication(T1SuperAiCLI.class);
+        app.setBannerMode(Banner.Mode.OFF);
 
-        SpringApplication app = new SpringApplication(T1SuperAiApplication.class);
+        // Disable web server for CLI mode and set CLI mode flag
+        System.setProperty("spring.main.web-application-type", "none");
+        System.setProperty("t1.mode", "cli");
+
         app.run(args);
     }
 
@@ -60,10 +63,20 @@ public class T1SuperAiApplication {
         System.out.println(GREEN + message + RESET);
     }
 
+    /**
+     * Helper method to output info messages in cyan
+     */
+    private static void cyanToConsole(String message) {
+        log.info(message);
+        System.out.println(CYAN + message + RESET);
+    }
+
     @Bean
-    public CommandLineRunner runWebApp(
+    public CommandLineRunner runCLI(
             org.springframework.core.env.Environment environment,
             AgentConfigurationManager configManager,
+            @org.springframework.beans.factory.annotation.Autowired(required = false)
+            com.airepublic.t1.cli.SplitPaneCLI splitPaneCLI,
             @org.springframework.beans.factory.annotation.Autowired(required = false)
             com.airepublic.t1.mcp.MCPServerRunner mcpServerRunner,
             @org.springframework.beans.factory.annotation.Autowired(required = false)
@@ -77,16 +90,16 @@ public class T1SuperAiApplication {
             @org.springframework.beans.factory.annotation.Autowired(required = false)
             com.airepublic.t1.session.SessionContextManager sessionContextManager) {
         return args -> {
-            // Only run if t1.mode is set to webapp
+            // Only run if t1.mode is set to cli
             String mode = environment.getProperty("t1.mode", "");
-            if (!"webapp".equals(mode)) {
-                log.debug("Skipping webapp runner - t1.mode is not 'webapp' (current: {})", mode);
+            if (!"cli".equals(mode)) {
+                log.debug("Skipping CLI runner - t1.mode is not 'cli' (current: {})", mode);
                 return;
             }
             cyanToConsole("╔════════════════════════════════════════════════════════════╗");
-            cyanToConsole("║          T1 Super AI - Web Application Mode              ║");
+            cyanToConsole("║          T1 Super AI - Command Line Interface            ║");
             cyanToConsole("╚════════════════════════════════════════════════════════════╝");
-            infoToConsole("🚀 Starting web server...");
+            infoToConsole("🚀 Starting CLI mode...");
 
             // STEP 1: Initialize workspace FIRST (before anything else)
             boolean needsHatching = false;
@@ -100,7 +113,7 @@ public class T1SuperAiApplication {
                     // Show context summary
                     if (sessionContextManager != null) {
                         String contextSummary = sessionContextManager.getContextSummary();
-                        log.info("📋 Session Context:\n{}", contextSummary);
+                        infoToConsole("📋 Session Context:\n" + contextSummary);
                     }
                 }
             }
@@ -114,10 +127,9 @@ public class T1SuperAiApplication {
             // STEP 3: Check if configuration exists, otherwise run configuration wizard
             boolean wasJustConfigured = false;
             if (!configManager.isConfigured()) {
-                log.warn("⚠️ No configuration found. Please configure via web UI or run CLI mode for wizard.");
-                log.info("💡 Web UI will be available for configuration at http://localhost:8080");
-            } else {
-                infoToConsole("✅ Configuration loaded");
+                infoToConsole("No configuration found. Starting configuration wizard...");
+                configManager.runConfigurationWizard();
+                wasJustConfigured = true;
             }
 
             // STEP 4: Connect to MCP server to access tools
@@ -137,28 +149,24 @@ public class T1SuperAiApplication {
                 }
             }
 
-            // STEP 5: Web server is now running
-            cyanToConsole("");
-            cyanToConsole("┌────────────────────────────────────────────────────────┐");
-            cyanToConsole("│  ✅ Web UI is now available at:                        │");
-            cyanToConsole("│                                                        │");
-            cyanToConsole("│      http://localhost:8080                             │");
-            cyanToConsole("│                                                        │");
-            cyanToConsole("│  💡 Open your browser to interact with agents          │");
-            cyanToConsole("│  📝 For CLI mode, use: run-cli.sh or run-cli.bat      │");
-            cyanToConsole("└────────────────────────────────────────────────────────┘");
-            cyanToConsole("");
+            // STEP 5: After configuration wizard, check if HATCH is needed
+            if (wasJustConfigured) {
+                infoToConsole("✅ LLM configured - agent ready for interaction");
+                if (needsHatching && hatchingService != null) {
+                    infoToConsole("🥚 HATCH process will start - agent will guide you through personality setup");
+                    infoToConsole("📋 The agent will ask you questions to configure your preferences");
+                }
+            }
 
-            if (needsHatching && hatchingService != null) {
-                log.info("🥚 HATCH process required - configure via web UI");
+            // STEP 6: Start the CLI (this blocks)
+            if (splitPaneCLI != null) {
+                infoToConsole("✅ Starting Split-Pane CLI (Optimized for Windows, GitBash & Linux)");
+                infoToConsole("💡 Features: Fixed input at bottom, scrolling output, responsive terminal, full navigation!");
+                splitPaneCLI.start(needsHatching);
+            } else {
+                log.error("❌ SplitPaneCLI not available!");
+                throw new RuntimeException("SplitPaneCLI is required but not found");
             }
         };
-    }
-
-    /**
-     * Helper method to output cyan messages
-     */
-    private static void cyanToConsole(String message) {
-        System.out.println(CYAN + message + RESET);
     }
 }

@@ -37,7 +37,11 @@ build/
 
 ### Configuration ###
 config.json
+
+### Logs ###
 *.log
+logs/*.log
+!logs/.gitkeep
 
 ### Claude Code ###
 .claude/

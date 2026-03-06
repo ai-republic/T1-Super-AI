@@ -44,6 +44,9 @@ public class AgentOrchestrator {
     @Autowired(required = false)
     private VectorMemoryService memoryService;
 
+    @Autowired(required = false)
+    private AgentManager agentManager;
+
     private boolean autoModelSelectionEnabled = true; // Default enabled
 
     private final List<ConversationMessage> conversationHistory = new ArrayList<>();
@@ -78,9 +81,11 @@ public class AgentOrchestrator {
             final String finalResponse = runConversationLoop(chatClient, contextPrefix + userMessage);
 
             // Add assistant response to history
+            final String currentAgent = agentManager != null ? agentManager.getCurrentAgentName() : null;
             final ConversationMessage assistantMsg = ConversationMessage.builder()
                     .role("assistant")
                     .content(finalResponse)
+                    .agentName(currentAgent)
                     .timestamp(LocalDateTime.now())
                     .build();
             conversationHistory.add(assistantMsg);
@@ -290,7 +295,15 @@ public class AgentOrchestrator {
 
         // Load session context (USER.md and CHARACTER.md) on first message
         if (sessionContext == null) {
-            sessionContext = sessionContextManager.buildInitialContext();
+            // Get current agent name if available
+            final String currentAgent = agentManager != null ? agentManager.getCurrentAgentName() : null;
+            if (currentAgent != null) {
+                // Load agent-specific CHARACTER.md
+                sessionContext = sessionContextManager.buildInitialContext(currentAgent);
+            } else {
+                // Fallback to loading only USER.md
+                sessionContext = sessionContextManager.buildInitialContext();
+            }
         }
 
         // Build concise system message with session context
@@ -340,7 +353,14 @@ public class AgentOrchestrator {
      * Reload session context for a specific agent
      */
     public void reloadSessionContext(String agentName) {
-if (agentName == null) {            log.warn("Cannot reload session context for null agent name");            return;        }        // Load agent-specific CHARACTER.md and USER.md        sessionContext = sessionContextManager.buildInitialContext(agentName);        log.info("🔄 Session context reloaded for agent '{}' from USER.md and CHARACTER.md", agentName);        formatter.printSuccess("Session context reloaded for agent '" + agentName + "'");    }
+        if (agentName == null) {
+            log.warn("Cannot reload session context for null agent name");
+            return;
+        }
+        // Load agent-specific CHARACTER.md and USER.md
+        sessionContext = sessionContextManager.buildInitialContext(agentName);
+        log.info("🔄 Session context reloaded for agent '{}' from USER.md and CHARACTER.md", agentName);
+        formatter.printSuccess("Session context reloaded for agent '" + agentName + "'");
     }
 
     public List<ConversationMessage> getConversationHistory() {

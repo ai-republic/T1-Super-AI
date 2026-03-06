@@ -1,20 +1,20 @@
 package com.airepublic.t1.tools;
 
-import com.airepublic.t1.agent.Agent;
+import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
 import com.airepublic.t1.agent.AgentManager;
 import com.airepublic.t1.agent.AgentOrchestrator;
 import com.airepublic.t1.config.AgentConfigService;
 import com.airepublic.t1.config.AgentConfigurationManager;
 import com.airepublic.t1.model.AgentConfiguration.LLMProvider;
 import com.airepublic.t1.model.IndividualAgentConfig;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-
-import java.nio.file.Path;
-import java.time.LocalDateTime;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Tool to create a new agent with complete CHARACTER.md profile.
@@ -53,7 +53,7 @@ public class CreateAgentTool implements AgentTool {
                 - communication_style: How the agent communicates (default: "Clear and concise")
                 - personality: Personality traits (default: "Professional and helpful")
                 - emoji_preference: Emoji usage - "freely", "sparingly", "none" (default: "sparingly")
-                - constraints: Limitations or guidelines (default: "None specified")
+                - guidelines: Guidelines or Limitations (default: "None specified")
                 - context: System prompt for the agent (default: uses role)
                 - provider: LLM provider - OPENAI, ANTHROPIC, or OLLAMA (optional)
                 - model: Model name (optional, uses provider default if not specified)
@@ -67,7 +67,7 @@ public class CreateAgentTool implements AgentTool {
                   "communication_style": "Technical with specific examples",
                   "personality": "Thorough, constructive, and detail-oriented",
                   "emoji_preference": "sparingly",
-                  "constraints": "Focus on security and maintainability",
+                  "guidelines": "Focus on security and maintainability",
                   "provider": "OPENAI",
                   "model": "gpt-4o"
                 }
@@ -78,68 +78,68 @@ public class CreateAgentTool implements AgentTool {
 
     @Override
     public Map<String, Object> getParameterSchema() {
-        Map<String, Object> schema = new HashMap<>();
+        final Map<String, Object> schema = new HashMap<>();
         schema.put("type", "object");
 
-        Map<String, Object> properties = new HashMap<>();
+        final Map<String, Object> properties = new HashMap<>();
 
         // Required: name
-        Map<String, Object> nameProp = new HashMap<>();
+        final Map<String, Object> nameProp = new HashMap<>();
         nameProp.put("type", "string");
         nameProp.put("description", "Unique name for the agent (required)");
         properties.put("name", nameProp);
 
         // Optional: role
-        Map<String, Object> roleProp = new HashMap<>();
+        final Map<String, Object> roleProp = new HashMap<>();
         roleProp.put("type", "string");
         roleProp.put("description", "Agent's role or title (e.g., 'Senior Java Developer', 'Data Analyst')");
         properties.put("role", roleProp);
 
         // Optional: purpose
-        Map<String, Object> purposeProp = new HashMap<>();
+        final Map<String, Object> purposeProp = new HashMap<>();
         purposeProp.put("type", "string");
         purposeProp.put("description", "Main purpose of the agent (what it's designed to do)");
         properties.put("purpose", purposeProp);
 
         // Optional: personality
-        Map<String, Object> personalityProp = new HashMap<>();
+        final Map<String, Object> personalityProp = new HashMap<>();
         personalityProp.put("type", "string");
         personalityProp.put("description", "Personality traits (e.g., 'Professional and patient', 'Encouraging and supportive')");
         properties.put("personality", personalityProp);
 
         // Optional: communication_style
-        Map<String, Object> commStyleProp = new HashMap<>();
+        final Map<String, Object> commStyleProp = new HashMap<>();
         commStyleProp.put("type", "string");
         commStyleProp.put("description", "How the agent communicates (e.g., 'Clear with code examples', 'Formal and detailed')");
         properties.put("communication_style", commStyleProp);
 
         // Optional: specialties
-        Map<String, Object> specialtiesProp = new HashMap<>();
+        final Map<String, Object> specialtiesProp = new HashMap<>();
         specialtiesProp.put("type", "string");
         specialtiesProp.put("description", "Areas of expertise (e.g., 'Java, Spring Boot, REST APIs')");
         properties.put("specialties", specialtiesProp);
 
-        // Optional: constraints
-        Map<String, Object> constraintsProp = new HashMap<>();
-        constraintsProp.put("type", "string");
-        constraintsProp.put("description", "Limitations or guidelines (e.g., 'Requires unit tests for all code')");
-        properties.put("constraints", constraintsProp);
+        // Optional: guidelines
+        final Map<String, Object> guidelinesProp = new HashMap<>();
+        guidelinesProp.put("type", "string");
+        guidelinesProp.put("description", "Guidelines or Limitations (e.g., 'Requires unit tests for all code')");
+        properties.put("guidelines", guidelinesProp);
 
         // Optional: context
-        Map<String, Object> contextProp = new HashMap<>();
+        final Map<String, Object> contextProp = new HashMap<>();
         contextProp.put("type", "string");
         contextProp.put("description", "System prompt/context for the agent (uses role if not specified)");
         properties.put("context", contextProp);
 
         // Optional: provider
-        Map<String, Object> providerProp = new HashMap<>();
+        final Map<String, Object> providerProp = new HashMap<>();
         providerProp.put("type", "string");
         providerProp.put("description", "LLM provider: OPENAI, ANTHROPIC, or OLLAMA");
         providerProp.put("enum", new String[]{"OPENAI", "ANTHROPIC", "OLLAMA"});
         properties.put("provider", providerProp);
 
         // Optional: model
-        Map<String, Object> modelProp = new HashMap<>();
+        final Map<String, Object> modelProp = new HashMap<>();
         modelProp.put("type", "string");
         modelProp.put("description", "Model name (e.g., 'gpt-4o', 'claude-3-5-sonnet-20241022', 'llama3')");
         properties.put("model", modelProp);
@@ -151,7 +151,7 @@ public class CreateAgentTool implements AgentTool {
     }
 
     @Override
-    public String execute(Map<String, Object> arguments) throws Exception {
+    public String execute(final Map<String, Object> arguments) throws Exception {
         // Validate and extract required parameter
         String name = (String) arguments.get("name");
         if (name == null || name.trim().isEmpty()) {
@@ -170,21 +170,21 @@ public class CreateAgentTool implements AgentTool {
 
         try {
             // Extract optional parameters with defaults
-            String role = getStringOrDefault(arguments, "role", "AI Assistant");
-            String purpose = getStringOrDefault(arguments, "purpose", "General purpose assistance");
-            String specialization = getStringOrDefault(arguments, "specialization", "General AI assistance");
-            String communicationStyle = getStringOrDefault(arguments, "communication_style", "Clear and concise");
-            String personality = getStringOrDefault(arguments, "personality", "Professional and helpful");
-            String emojiPreference = getStringOrDefault(arguments, "emoji_preference", "sparingly");
-            String constraints = getStringOrDefault(arguments, "constraints", "None specified");
+            final String role = getStringOrDefault(arguments, "role", "AI Assistant");
+            final String purpose = getStringOrDefault(arguments, "purpose", "General purpose assistance");
+            final String specialization = getStringOrDefault(arguments, "specialization", "General AI assistance");
+            final String communicationStyle = getStringOrDefault(arguments, "communication_style", "Clear and concise");
+            final String personality = getStringOrDefault(arguments, "personality", "Professional and helpful");
+            final String emojiPreference = getStringOrDefault(arguments, "emoji_preference", "sparingly");
+            final String guidelines = getStringOrDefault(arguments, "guidelines", AgentConfigService.getCharacterGuidlinesTemplate());
 
             // Extract provider and model (optional - use defaults from global config if not specified)
             LLMProvider provider = null;
-            String providerStr = (String) arguments.get("provider");
+            final String providerStr = (String) arguments.get("provider");
             if (providerStr != null && !providerStr.trim().isEmpty()) {
                 try {
                     provider = LLMProvider.valueOf(providerStr.toUpperCase());
-                } catch (IllegalArgumentException e) {
+                } catch (final IllegalArgumentException e) {
                     return "Error: Invalid provider '" + providerStr + "'. Valid options: OPENAI, ANTHROPIC, OLLAMA";
                 }
             } else {
@@ -195,7 +195,7 @@ public class CreateAgentTool implements AgentTool {
             String model = (String) arguments.get("model");
             if (model == null || model.trim().isEmpty()) {
                 // Use default model from global config
-                var llmConfig = configManager.getConfiguration().getLlmConfigs().get(provider);
+                final var llmConfig = configManager.getConfiguration().getLlmConfigs().get(provider);
                 model = llmConfig != null ? llmConfig.getModel() : "default";
             }
 
@@ -205,24 +205,25 @@ public class CreateAgentTool implements AgentTool {
 
             // Step 2: Create agent configuration
             log.info("Creating configuration for '{}'", name);
-            IndividualAgentConfig config = new IndividualAgentConfig(
-                name,                       // name
-                role,                       // role
-                purpose,                    // purpose
-                specialization,             // specialization
-                communicationStyle,         // style
-                personality,                // personality
-                emojiPreference,            // emojiPreference
-                "active",                   // status
-                LocalDateTime.now(),        // createdAt
-                LocalDateTime.now(),        // lastModifiedAt
-                provider,                   // provider
-                model                       // model
-            );
+            final IndividualAgentConfig config = new IndividualAgentConfig(
+                    name,                       // name
+                    role,                       // role
+                    purpose,                    // purpose
+                    specialization,             // specialization
+                    communicationStyle,         // style
+                    personality,                // personality
+                    emojiPreference,            // emojiPreference
+                    AgentConfigService.getCharacterGuidlinesTemplate(), // guidelines
+                    "active",                   // status
+                    LocalDateTime.now(),        // createdAt
+                    LocalDateTime.now(),        // lastModifiedAt
+                    provider,                   // provider
+                    model                       // model
+                    );
 
             // Step 3: Create CHARACTER.md
             log.info("Creating CHARACTER.md for '{}'", name);
-            agentConfigService.createCharacterMd(config, AgentConfigService.getCharacterBehaviorTemplate());
+            agentConfigService.createCharacterMd(config, AgentConfigService.getCharacterGuidlinesTemplate());
 
             // Step 4: Create USAGE.md
             log.info("Creating USAGE.md for '{}'", name);
@@ -230,10 +231,10 @@ public class CreateAgentTool implements AgentTool {
 
             // Step 5: Register agent in AgentManager
             log.info("Registering agent '{}' in AgentManager", name);
-            Agent agent = agentManager.createAgent(name, orchestrator, config);
+            agentManager.createAgent(name, orchestrator, config);
 
             // Build success message
-            StringBuilder result = new StringBuilder();
+            final StringBuilder result = new StringBuilder();
             result.append("✅ Agent '").append(name).append("' successfully created!\n\n");
             result.append("📋 Agent Profile:\n");
             result.append("   • Name: ").append(name).append("\n");
@@ -243,7 +244,7 @@ public class CreateAgentTool implements AgentTool {
             result.append("   • Communication Style: ").append(communicationStyle).append("\n");
             result.append("   • Specialization: ").append(specialization).append("\n");
             result.append("   • Emoji Preference: ").append(emojiPreference).append("\n");
-            result.append("   • Constraints: ").append(constraints).append("\n\n");
+            result.append("   • Guidelines: ").append(guidelines).append("\n\n");
 
             result.append("⚙️  Configuration:\n");
             if (provider != null) {
@@ -268,7 +269,7 @@ public class CreateAgentTool implements AgentTool {
             log.info("Successfully created agent '{}'", name);
             return result.toString();
 
-        } catch (Exception e) {
+        } catch (final Exception e) {
             log.error("Error creating agent '{}'", name, e);
 
             // Attempt cleanup on error
@@ -277,7 +278,7 @@ public class CreateAgentTool implements AgentTool {
                 if (agentManager.hasAgent(name)) {
                     agentManager.removeAgent(name);
                 }
-            } catch (Exception cleanupError) {
+            } catch (final Exception cleanupError) {
                 log.error("Error during cleanup", cleanupError);
             }
 
@@ -288,12 +289,12 @@ public class CreateAgentTool implements AgentTool {
     /**
      * Helper method to get string value or default
      */
-    private String getStringOrDefault(Map<String, Object> arguments, String key, String defaultValue) {
-        Object value = arguments.get(key);
+    private String getStringOrDefault(final Map<String, Object> arguments, final String key, final String defaultValue) {
+        final Object value = arguments.get(key);
         if (value == null) {
             return defaultValue;
         }
-        String strValue = value.toString().trim();
+        final String strValue = value.toString().trim();
         return strValue.isEmpty() ? defaultValue : strValue;
     }
 }

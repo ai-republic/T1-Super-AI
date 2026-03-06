@@ -77,9 +77,9 @@ Agents autonomously extend their capabilities by:
 - **SimpleVectorStore**: Built-in vector store for quick setup
 - **Redis Support**: Planned support for distributed vector storage
 
-### 🌐 Dual Interface
-- **REST API**: Full-featured HTTP API for system integration
-- **Interactive CLI**: Rich terminal interface with split-pane design for real-time interaction
+### 🌐 Dual Launch Modes
+- **Web Application Mode (Default)**: Browser-based UI with REST API, WebSocket support, and multi-user access
+- **CLI Mode (Standalone)**: Rich terminal interface with split-pane design for single-user interaction without web server
 
 ### 🔒 Security & Authentication
 - **API Key Authentication**: Secure access control for REST endpoints
@@ -113,10 +113,36 @@ cd t1-super-ai
 
 # Build the project
 mvn clean package -DskipTests
-
-# Run the application
-java -jar target/t1-super-ai-1.0.0-SNAPSHOT.jar
 ```
+
+### Launch Modes
+
+T1 Super AI can run in two modes:
+
+#### 1. Web Application Mode (Default)
+Browser-based UI with REST API support:
+```bash
+# Run the web application (default)
+java -jar target/t1-super-ai-1.0.0-SNAPSHOT.jar
+
+# Or use the launch script
+./run-webapp.sh      # Linux/Mac
+run-webapp.bat       # Windows
+```
+Access the web UI at: **http://localhost:8080**
+
+#### 2. CLI Mode (Standalone)
+Terminal-based interface without web server:
+```bash
+# Run in CLI mode
+java -jar target/t1-super-ai-1.0.0-SNAPSHOT.jar --spring.profiles.active=cli
+
+# Or use the launch script
+./run-cli.sh         # Linux/Mac
+run-cli.bat          # Windows
+```
+
+See **[LAUNCH_MODES.md](LAUNCH_MODES.md)** for detailed comparison and usage instructions.
 
 ### Initial Setup
 

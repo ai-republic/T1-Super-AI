@@ -1,5 +1,13 @@
 package com.airepublic.t1.cli;
 
+import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+import org.springframework.stereotype.Component;
+
 import com.airepublic.t1.agent.Agent;
 import com.airepublic.t1.agent.AgentManager;
 import com.airepublic.t1.agent.AgentOrchestrator;
@@ -9,20 +17,13 @@ import com.airepublic.t1.config.AgentConfigurationManager;
 import com.airepublic.t1.mcp.MCPClient;
 import com.airepublic.t1.model.AgentConfiguration;
 import com.airepublic.t1.model.AgentConfiguration.LLMProvider;
-import com.airepublic.t1.model.AgentConfiguration.TaskType;
 import com.airepublic.t1.model.AgentConfiguration.TaskModelConfig;
+import com.airepublic.t1.model.AgentConfiguration.TaskType;
 import com.airepublic.t1.model.IndividualAgentConfig;
 import com.airepublic.t1.plugins.PluginManager;
 import com.airepublic.t1.service.AgentHatchingWizard;
-import com.airepublic.t1.skills.Skill;
 import com.airepublic.t1.skills.SkillManager;
 import com.airepublic.t1.tools.AutoModelSelectorTool;
-import lombok.RequiredArgsConstructor;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
-
-import java.time.format.DateTimeFormatter;
-import java.util.*;
 
 @Component
 public class CommandHandler {
@@ -37,21 +38,20 @@ public class CommandHandler {
     private final AgentOrchestrator orchestrator;
     private final AgentManager agentManager;
     private final AutoModelSelectorTool autoModelSelector;
-    private final AgentHatchingWizard hatchingWizard;
 
     // Constructor
     public CommandHandler(
-            AgentConfigurationManager configManager,
-            AgentConfigService agentConfigService,
-            PluginManager pluginManager,
-            SkillManager skillManager,
-            ToolRegistry toolRegistry,
-            MCPClient mcpClient,
-            CLIFormatter formatter,
-            AgentOrchestrator orchestrator,
-            AgentManager agentManager,
-            AutoModelSelectorTool autoModelSelector,
-            AgentHatchingWizard hatchingWizard) {
+            final AgentConfigurationManager configManager,
+            final AgentConfigService agentConfigService,
+            final PluginManager pluginManager,
+            final SkillManager skillManager,
+            final ToolRegistry toolRegistry,
+            final MCPClient mcpClient,
+            final CLIFormatter formatter,
+            final AgentOrchestrator orchestrator,
+            final AgentManager agentManager,
+            final AutoModelSelectorTool autoModelSelector,
+            final AgentHatchingWizard hatchingWizard) {
         this.configManager = configManager;
         this.agentConfigService = agentConfigService;
         this.pluginManager = pluginManager;
@@ -62,20 +62,19 @@ public class CommandHandler {
         this.orchestrator = orchestrator;
         this.agentManager = agentManager;
         this.autoModelSelector = autoModelSelector;
-        this.hatchingWizard = hatchingWizard;
     }
 
     /**
      * Set the CLI implementation (called by CLI on startup)
      */
-    public void setCLI(CLI cli) {
+    public void setCLI(final CLI cli) {
         this.cli = cli;
     }
 
-    public void handleCommand(String input) {
-        String[] parts = input.substring(1).split("\\s+", 2);
-        String command = parts[0].toLowerCase();
-        String args = parts.length > 1 ? parts[1] : "";
+    public void handleCommand(final String input) {
+        final String[] parts = input.substring(1).split("\\s+", 2);
+        final String command = parts[0].toLowerCase();
+        final String args = parts.length > 1 ? parts[1] : "";
 
         switch (command) {
             case "help" -> showHelp();
@@ -96,7 +95,7 @@ public class CommandHandler {
     }
 
     private void showHelp() {
-        String help = """
+        final String help = """
 
                 Available Commands:
 
@@ -133,7 +132,7 @@ public class CommandHandler {
         formatter.printSuccess("Configuration updated!");
     }
 
-    private void handleProvider(String args) {
+    private void handleProvider(final String args) {
         if (args.isEmpty()) {
             formatter.printInfo("Current provider: " +
                     configManager.getConfiguration().getDefaultProvider());
@@ -141,15 +140,15 @@ public class CommandHandler {
         }
 
         try {
-            LLMProvider provider = LLMProvider.valueOf(args.toUpperCase());
+            final LLMProvider provider = LLMProvider.valueOf(args.toUpperCase());
             configManager.updateProvider(provider);
             formatter.printSuccess("Switched to provider: " + provider);
-        } catch (IllegalArgumentException e) {
+        } catch (final IllegalArgumentException e) {
             formatter.printError("Invalid provider. Available: openai, anthropic, ollama");
         }
     }
 
-    private void handleModel(String args) {
+    private void handleModel(final String args) {
         if (args.isEmpty()) {
             showModelSelectionMenu();
             return;
@@ -157,53 +156,53 @@ public class CommandHandler {
 
         // Check if args is a number (menu selection)
         try {
-            int selection = Integer.parseInt(args);
+            final int selection = Integer.parseInt(args);
             handleModelSelection(selection);
             return;
-        } catch (NumberFormatException e) {
+        } catch (final NumberFormatException e) {
             // Not a number, treat as model name
         }
 
         // Change model directly by name
         try {
             configManager.updateModel(args);
-            LLMProvider currentProvider = configManager.getConfiguration().getDefaultProvider();
+            final LLMProvider currentProvider = configManager.getConfiguration().getDefaultProvider();
             formatter.printSuccess("Model changed to: " + args + " (" + currentProvider + ")");
             formatter.printInfo("💡 Note: The change takes effect for new conversations.");
-        } catch (Exception e) {
+        } catch (final Exception e) {
             formatter.printError("Error changing model: " + e.getMessage());
         }
     }
 
-    private void handleModelSelection(int selection) {
-        AgentConfiguration config = configManager.getConfiguration();
-        LLMProvider currentProvider = config.getDefaultProvider();
+    private void handleModelSelection(final int selection) {
+        final AgentConfiguration config = configManager.getConfiguration();
+        final LLMProvider currentProvider = config.getDefaultProvider();
 
         // Rebuild the model options map (same as in showModelSelectionMenu)
-        Map<Integer, ModelOption> modelOptions = new LinkedHashMap<>();
+        final Map<Integer, ModelOption> modelOptions = new LinkedHashMap<>();
         int optionNumber = 1;
 
         // 1. Default provider model
-        var defaultLlmConfig = config.getLlmConfigs().get(currentProvider);
+        final var defaultLlmConfig = config.getLlmConfigs().get(currentProvider);
         if (defaultLlmConfig != null) {
-            String defaultModel = defaultLlmConfig.getModel();
+            final String defaultModel = defaultLlmConfig.getModel();
             modelOptions.put(optionNumber++, new ModelOption(defaultModel, currentProvider, "Default model"));
         }
 
         // 2. Task-specific models - show ALL
         if (!config.getTaskModels().isEmpty()) {
-            for (TaskType taskType : TaskType.values()) {
-                TaskModelConfig taskConfig = config.getTaskModels().get(taskType);
+            for (final TaskType taskType : TaskType.values()) {
+                final TaskModelConfig taskConfig = config.getTaskModels().get(taskType);
                 if (taskConfig != null) {
                     modelOptions.put(optionNumber++,
-                        new ModelOption(taskConfig.getModel(), taskConfig.getProvider(),
-                                      "For " + taskType.getDisplayName()));
+                            new ModelOption(taskConfig.getModel(), taskConfig.getProvider(),
+                                    "For " + taskType.getDisplayName()));
                 }
             }
         }
 
         // Custom option
-        int customOptionNumber = optionNumber;
+        final int customOptionNumber = optionNumber;
         modelOptions.put(customOptionNumber, new ModelOption(null, currentProvider, "Custom"));
 
         // Validate selection
@@ -213,7 +212,7 @@ public class CommandHandler {
             return;
         }
 
-        ModelOption selected = modelOptions.get(selection);
+        final ModelOption selected = modelOptions.get(selection);
 
         if (selected.model == null) {
             // Custom model - need to prompt
@@ -227,15 +226,15 @@ public class CommandHandler {
             configManager.updateModel(selected.model);
             formatter.printSuccess("Model changed to: " + selected.model + " (" + selected.provider + ")");
             formatter.printInfo("💡 Note: The change takes effect for new conversations.");
-        } catch (Exception e) {
+        } catch (final Exception e) {
             formatter.printError("Error changing model: " + e.getMessage());
         }
     }
 
     private void showModelSelectionMenu() {
-        AgentConfiguration config = configManager.getConfiguration();
-        String currentModel = configManager.getCurrentModel();
-        LLMProvider currentProvider = config.getDefaultProvider();
+        final AgentConfiguration config = configManager.getConfiguration();
+        final String currentModel = configManager.getCurrentModel();
+        final LLMProvider currentProvider = config.getDefaultProvider();
 
         // Show header
         formatter.printInfo("\n╔═══════════════════════════════════════════════════════════════╗");
@@ -244,14 +243,14 @@ public class CommandHandler {
         formatter.printInfo("\n📌 Current: " + currentModel + " (" + currentProvider + ")");
 
         // Collect all available models
-        Map<Integer, ModelOption> modelOptions = new LinkedHashMap<>();
+        final Map<Integer, ModelOption> modelOptions = new LinkedHashMap<>();
         int optionNumber = 1;
 
         // 1. Default provider model
         formatter.printInfo("\n🔧 Default Provider Model:");
-        var defaultLlmConfig = config.getLlmConfigs().get(currentProvider);
+        final var defaultLlmConfig = config.getLlmConfigs().get(currentProvider);
         if (defaultLlmConfig != null) {
-            String defaultModel = defaultLlmConfig.getModel();
+            final String defaultModel = defaultLlmConfig.getModel();
             modelOptions.put(optionNumber, new ModelOption(defaultModel, currentProvider, "Default model"));
             formatter.printInfo("  " + optionNumber++ + ". " + defaultModel + " (" + currentProvider + ") - Default");
         }
@@ -259,14 +258,14 @@ public class CommandHandler {
         // 2. Task-specific models - show ALL, no filtering
         if (!config.getTaskModels().isEmpty()) {
             formatter.printInfo("\n🎯 Task-Specific Models:");
-            for (TaskType taskType : TaskType.values()) {
-                TaskModelConfig taskConfig = config.getTaskModels().get(taskType);
+            for (final TaskType taskType : TaskType.values()) {
+                final TaskModelConfig taskConfig = config.getTaskModels().get(taskType);
                 if (taskConfig != null) {
                     modelOptions.put(optionNumber,
-                        new ModelOption(taskConfig.getModel(), taskConfig.getProvider(),
-                                      "For " + taskType.getDisplayName()));
+                            new ModelOption(taskConfig.getModel(), taskConfig.getProvider(),
+                                    "For " + taskType.getDisplayName()));
                     formatter.printInfo("  " + optionNumber++ + ". " + taskConfig.getModel() +
-                        " (" + taskConfig.getProvider() + ") - " + taskType.getDisplayName());
+                            " (" + taskConfig.getProvider() + ") - " + taskType.getDisplayName());
                 }
             }
         }
@@ -285,12 +284,10 @@ public class CommandHandler {
     private static class ModelOption {
         String model;
         LLMProvider provider;
-        String description;
 
-        ModelOption(String model, LLMProvider provider, String description) {
+        ModelOption(final String model, final LLMProvider provider, final String description) {
             this.model = model;
             this.provider = provider;
-            this.description = description;
         }
     }
 
@@ -299,7 +296,7 @@ public class CommandHandler {
 
         // If no arguments, show current status
         if (args.isEmpty()) {
-            boolean isEnabled = orchestrator.isAutoModelSelectionEnabled();
+            final boolean isEnabled = orchestrator.isAutoModelSelectionEnabled();
             formatter.printInfo("\n╔═══════════════════════════════════════════════════════════════╗");
             formatter.printInfo("║  🎯 Automatic Model Selection                                ║");
             formatter.printInfo("╚═══════════════════════════════════════════════════════════════╝");
@@ -312,14 +309,14 @@ public class CommandHandler {
             formatter.printInfo("  /auto-model         Show current status\n");
 
             // Show configured task models
-            AgentConfiguration config = configManager.getConfiguration();
+            final AgentConfiguration config = configManager.getConfiguration();
             if (!config.getTaskModels().isEmpty()) {
                 formatter.printInfo("🎯 Configured Task-Specific Models:");
-                for (TaskType taskType : TaskType.values()) {
-                    TaskModelConfig taskConfig = config.getTaskModels().get(taskType);
+                for (final TaskType taskType : TaskType.values()) {
+                    final TaskModelConfig taskConfig = config.getTaskModels().get(taskType);
                     if (taskConfig != null) {
                         formatter.printInfo("  • " + taskType.getDisplayName() + ": " +
-                            taskConfig.getProvider() + " - " + taskConfig.getModel());
+                                taskConfig.getProvider() + " - " + taskConfig.getModel());
                     }
                 }
             } else {
@@ -350,7 +347,7 @@ public class CommandHandler {
         }
     }
 
-    private void handleClassify(String args) {
+    private void handleClassify(final String args) {
         if (args.trim().isEmpty()) {
             formatter.printError("Usage: /classify <prompt to classify>");
             formatter.printInfo("Example: /classify Write a Python function to sort an array");
@@ -365,7 +362,7 @@ public class CommandHandler {
 
         try {
             // Get detailed classification with explanation
-            String analysis = autoModelSelector.getDetailedAnalysis(args);
+            final String analysis = autoModelSelector.getDetailedAnalysis(args);
 
             formatter.printInfo("🎯 Classification Result:");
             formatter.printInfo("─".repeat(65));
@@ -373,19 +370,19 @@ public class CommandHandler {
             formatter.printInfo("─".repeat(65));
 
             // Also show what would actually be selected
-            Optional<TaskType> taskType = autoModelSelector.selectTaskTypeForPrompt(args);
+            final Optional<TaskType> taskType = autoModelSelector.selectTaskTypeForPrompt(args);
 
             formatter.printInfo("\n📊 Selected Model:");
             if (taskType.isEmpty()) {
                 formatter.printInfo("  • Using DEFAULT provider (general task)");
-                AgentConfiguration config = configManager.getConfiguration();
-                var llmConfig = config.getLlmConfigs().get(config.getDefaultProvider());
+                final AgentConfiguration config = configManager.getConfiguration();
+                final var llmConfig = config.getLlmConfigs().get(config.getDefaultProvider());
                 if (llmConfig != null) {
                     formatter.printInfo("  • Model: " + config.getDefaultProvider() + " - " + llmConfig.getModel());
                 }
             } else {
-                AgentConfiguration config = configManager.getConfiguration();
-                TaskModelConfig taskConfig = config.getTaskModels().get(taskType.get());
+                final AgentConfiguration config = configManager.getConfiguration();
+                final TaskModelConfig taskConfig = config.getTaskModels().get(taskType.get());
                 if (taskConfig != null) {
                     formatter.printInfo("  • Task Type: " + taskType.get().getDisplayName());
                     formatter.printInfo("  • Model: " + taskConfig.getProvider() + " - " + taskConfig.getModel());
@@ -396,21 +393,21 @@ public class CommandHandler {
             }
             formatter.printInfo("");
 
-        } catch (Exception e) {
+        } catch (final Exception e) {
             formatter.printError("Error during classification: " + e.getMessage());
             e.printStackTrace();
         }
     }
 
-    private void handleMCP(String args) {
-        String[] parts = args.split("\\s+", 2);
-        String subcommand = parts.length > 0 ? parts[0] : "";
+    private void handleMCP(final String args) {
+        final String[] parts = args.split("\\s+", 2);
+        final String subcommand = parts.length > 0 ? parts[0] : "";
 
         switch (subcommand) {
             case "list" -> {
                 formatter.printInfo("Connected MCP servers:");
                 mcpClient.getConnectedServers().forEach(server ->
-                        formatter.printSuccess("  - " + server));
+                formatter.printSuccess("  - " + server));
             }
             case "tools" -> {
                 if (parts.length < 2) {
@@ -418,17 +415,17 @@ public class CommandHandler {
                     formatter.printInfo("Use 'local' to see plugin tools: /mcp tools local");
                     return;
                 }
-                String serverName = parts[1];
+                final String serverName = parts[1];
 
                 // Handle local tools (core + plugins)
                 if ("local".equalsIgnoreCase(serverName)) {
                     formatter.printInfo("Tools from local server (core + plugins):");
-                    var allTools = toolRegistry.getAllTools();
+                    final var allTools = toolRegistry.getAllTools();
                     if (allTools.isEmpty()) {
                         formatter.printInfo("  No tools available");
                     } else {
                         allTools.forEach(tool ->
-                                System.out.println("  - " + tool.getName() + ": " + tool.getDescription()));
+                        System.out.println("  - " + tool.getName() + ": " + tool.getDescription()));
                         formatter.printInfo("\nTotal: " + allTools.size() + " tools");
                     }
                     return;
@@ -436,11 +433,11 @@ public class CommandHandler {
 
                 // Handle external MCP servers
                 try {
-                    var tools = mcpClient.listTools(serverName);
+                    final var tools = mcpClient.listTools(serverName);
                     formatter.printInfo("Tools from " + serverName + ":");
                     tools.forEach(tool ->
-                            System.out.println("  - " + tool.getName() + ": " + tool.getDescription()));
-                } catch (Exception e) {
+                    System.out.println("  - " + tool.getName() + ": " + tool.getDescription()));
+                } catch (final Exception e) {
                     formatter.printError("Error listing tools: " + e.getMessage());
                 }
             }
@@ -448,31 +445,31 @@ public class CommandHandler {
         }
     }
 
-    private void handlePlugin(String args) {
-        String[] parts = args.split("\\s+", 2);
-        String subcommand = parts.length > 0 ? parts[0] : "";
+    private void handlePlugin(final String args) {
+        final String[] parts = args.split("\\s+", 2);
+        final String subcommand = parts.length > 0 ? parts[0] : "";
 
         switch (subcommand) {
             case "list" -> {
                 formatter.printInfo("Loaded plugins:");
-                var plugins = pluginManager.getAllPlugins();
+                final var plugins = pluginManager.getAllPlugins();
                 if (plugins.isEmpty()) {
                     formatter.printInfo("  No plugins loaded");
                 } else {
                     plugins.forEach(plugin ->
-                            System.out.println("  - " + plugin.getName() + " v" + plugin.getVersion() +
-                                    " (" + plugin.getType() + "): " + plugin.getDescription() +
-                                    " [" + plugin.getTools().size() + " tools]"));
+                    System.out.println("  - " + plugin.getName() + " v" + plugin.getVersion() +
+                            " (" + plugin.getType() + "): " + plugin.getDescription() +
+                            " [" + plugin.getTools().size() + " tools]"));
                 }
             }
             case "tools" -> {
                 formatter.printInfo("All tools from plugins:");
-                var allTools = pluginManager.getAllPluginTools();
+                final var allTools = pluginManager.getAllPluginTools();
                 if (allTools.isEmpty()) {
                     formatter.printInfo("  No plugin tools loaded");
                 } else {
                     allTools.forEach(tool ->
-                            System.out.println("  - " + tool.getName() + ": " + tool.getDescription()));
+                    System.out.println("  - " + tool.getName() + ": " + tool.getDescription()));
                 }
             }
             case "reload" -> {
@@ -484,15 +481,15 @@ public class CommandHandler {
         }
     }
 
-    private void handleSkill(String args) {
-        String[] parts = args.split("\\s+", 2);
-        String subcommand = parts.length > 0 ? parts[0] : "";
+    private void handleSkill(final String args) {
+        final String[] parts = args.split("\\s+", 2);
+        final String subcommand = parts.length > 0 ? parts[0] : "";
 
         switch (subcommand) {
             case "list" -> {
                 formatter.printInfo("Available skills:");
                 skillManager.getAllSkills().forEach(skill ->
-                        System.out.println("  - " + skill.getName() + ": " + skill.getDescription()));
+                System.out.println("  - " + skill.getName() + ": " + skill.getDescription()));
             }
             case "create" -> {
                 formatter.printInfo("Skill creation wizard coming soon...");
@@ -502,9 +499,9 @@ public class CommandHandler {
         }
     }
 
-    private void handleAgent(String args) {
-        String[] parts = args.split("\\s+", 2);
-        String subcommand = parts.length > 0 ? parts[0] : "";
+    private void handleAgent(final String args) {
+        final String[] parts = args.split("\\s+", 2);
+        final String subcommand = parts.length > 0 ? parts[0] : "";
 
         switch (subcommand) {
             case "create" -> handleAgentCreate(parts.length > 1 ? parts[1] : "");
@@ -515,7 +512,7 @@ public class CommandHandler {
         }
     }
 
-    private void handleAgentCreate(String agentName) {
+    private void handleAgentCreate(final String agentName) {
         if (agentName.isEmpty()) {
             formatter.printError("Usage: /agent create <name>");
             formatter.printInfo("Example: /agent create dev-agent");
@@ -541,7 +538,7 @@ public class CommandHandler {
             // Delegate to CLI for interactive wizard
             cli.startAgentCreationWizard(agentName);
 
-        } catch (Exception e) {
+        } catch (final Exception e) {
             formatter.printError("Error creating agent: " + e.getMessage());
             e.printStackTrace();
         }
@@ -550,51 +547,52 @@ public class CommandHandler {
     /**
      * Create an agent with default settings (fallback)
      */
-    private void createAgentWithDefaults(String agentName) {
+    private void createAgentWithDefaults(final String agentName) {
         try {
-            AgentConfiguration config = configManager.getConfiguration();
-            LLMProvider defaultProvider = config.getDefaultProvider();
-            var llmConfig = config.getLlmConfigs().get(defaultProvider);
-            String defaultModel = llmConfig != null ? llmConfig.getModel() : "default";
+            final AgentConfiguration config = configManager.getConfiguration();
+            final LLMProvider defaultProvider = config.getDefaultProvider();
+            final var llmConfig = config.getLlmConfigs().get(defaultProvider);
+            final String defaultModel = llmConfig != null ? llmConfig.getModel() : "default";
 
-            IndividualAgentConfig agentConfig = new IndividualAgentConfig(
-                agentName,                          // name
-                "General Purpose Agent",             // role
-                "A helpful AI assistant",            // purpose
-                "General assistance",                // specialization
-                "Clear and concise",                 // style
-                "Professional and helpful",          // personality
-                "sparingly",                         // emojiPreference
-                "active",                            // status
-                java.time.LocalDateTime.now(),       // createdAt
-                java.time.LocalDateTime.now(),       // lastModifiedAt
-                defaultProvider,                     // provider
-                defaultModel                         // model
-            );
+            final IndividualAgentConfig agentConfig = new IndividualAgentConfig(
+                    agentName,                          // name
+                    "General Purpose Agent",             // role
+                    "A helpful AI assistant",            // purpose
+                    "General assistance",                // specialization
+                    "Clear and concise",                 // style
+                    "Professional and helpful",          // personality
+                    "sparingly",                         // emojiPreference
+                    AgentConfigService.getCharacterGuidlinesTemplate(), // guidelines
+                    "active",                            // status
+                    java.time.LocalDateTime.now(),       // createdAt
+                    java.time.LocalDateTime.now(),       // lastModifiedAt
+                    defaultProvider,                     // provider
+                    defaultModel                         // model
+                    );
 
             // Create agent folder and CHARACTER.md
             try {
                 agentConfigService.createAgentFolder(agentName);
-                agentConfigService.createCharacterMd(agentConfig, AgentConfigService.getCharacterBehaviorTemplate());
+                agentConfigService.createCharacterMd(agentConfig, AgentConfigService.getCharacterGuidlinesTemplate());
                 agentConfigService.createUsageMd(agentName, agentConfig);
-            } catch (Exception e) {
+            } catch (final Exception e) {
                 formatter.printError("Warning: Could not create agent files: " + e.getMessage());
             }
 
             // Create the agent
-            Agent newAgent = agentManager.createAgent(agentName, orchestrator, agentConfig);
+            agentManager.createAgent(agentName, orchestrator, agentConfig);
 
             formatter.printSuccess("✅ Agent '" + agentName + "' created with default settings!");
             formatter.printInfo("Provider: " + defaultProvider + " | Model: " + defaultModel);
             formatter.printInfo("💡 Use '/agent use " + agentName + "' to switch to this agent");
 
-        } catch (Exception e) {
+        } catch (final Exception e) {
             formatter.printError("Error creating agent: " + e.getMessage());
         }
     }
 
 
-    private void handleAgentUse(String agentName) {
+    private void handleAgentUse(final String agentName) {
         if (agentName.isEmpty()) {
             formatter.printError("Usage: /agent use <name>");
             formatter.printInfo("Use '/agent list' to see all agents");
@@ -625,13 +623,13 @@ public class CommandHandler {
                 cli.updatePromptAgent(agentName);
             }
 
-        } catch (Exception e) {
+        } catch (final Exception e) {
             formatter.printError("Error switching agent: " + e.getMessage());
         }
     }
 
     private void handleAgentList() {
-        List<Agent> agents = agentManager.listAgents();
+        final List<Agent> agents = agentManager.listAgents();
 
         if (agents.isEmpty()) {
             formatter.printInfo("No agents found");
@@ -642,12 +640,12 @@ public class CommandHandler {
         formatter.printInfo("Active Agents (" + agents.size() + "):");
         formatter.printInfo("");
 
-        DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-        String currentAgentName = agentManager.getCurrentAgentName();
+        final DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        final String currentAgentName = agentManager.getCurrentAgentName();
 
-        for (Agent agent : agents) {
-            String marker = agent.getName().equals(currentAgentName) ? " *" : "  ";
-            String statusIcon = switch (agent.getStatus()) {
+        for (final Agent agent : agents) {
+            final String marker = agent.getName().equals(currentAgentName) ? " *" : "  ";
+            final String statusIcon = switch (agent.getStatus()) {
                 case "active" -> "🟢";
                 case "idle" -> "🟡";
                 case "stopped" -> "🔴";
@@ -655,11 +653,11 @@ public class CommandHandler {
             };
 
             System.out.println(marker + statusIcon + " " + agent.getName() +
-                " (" + agent.getStatus() + ")");
+                    " (" + agent.getStatus() + ")");
 
             // Show configuration if available
             if (agent.getConfig() != null) {
-                IndividualAgentConfig config = agent.getConfig();
+                final IndividualAgentConfig config = agent.getConfig();
                 System.out.println("    📋 Role: " + config.getRole());
                 System.out.println("    📝 Purpose: " + config.getPurpose());
                 System.out.println("    ⭐ Specialization: " + config.getSpecialization());
@@ -676,7 +674,7 @@ public class CommandHandler {
         formatter.printInfo("");
     }
 
-    private void handleAgentRemove(String agentName) {
+    private void handleAgentRemove(final String agentName) {
         if (agentName.isEmpty()) {
             formatter.printError("Usage: /agent remove <name>");
             return;
@@ -686,16 +684,16 @@ public class CommandHandler {
             // Confirm deletion
             System.out.print("Are you sure you want to remove agent '" + agentName + "'? (y/n): ");
             System.out.flush();
-            String response = System.console() != null ?
-                System.console().readLine() :
-                new java.util.Scanner(System.in).nextLine();
+            final String response = System.console() != null ?
+                    System.console().readLine() :
+                        new java.util.Scanner(System.in).nextLine();
 
             if (response == null || !response.trim().toLowerCase().startsWith("y")) {
                 formatter.printInfo("Cancelled");
                 return;
             }
 
-            boolean removed = agentManager.removeAgent(agentName);
+            final boolean removed = agentManager.removeAgent(agentName);
 
             if (removed) {
                 formatter.printSuccess("Agent '" + agentName + "' removed");
@@ -708,9 +706,9 @@ public class CommandHandler {
                 formatter.printError("Agent '" + agentName + "' not found");
             }
 
-        } catch (IllegalArgumentException e) {
+        } catch (final IllegalArgumentException e) {
             formatter.printError(e.getMessage());
-        } catch (Exception e) {
+        } catch (final Exception e) {
             formatter.printError("Error removing agent: " + e.getMessage());
         }
     }

@@ -51,15 +51,20 @@ public class AgentDetails {
 
     @Schema(description = "Communication style preferences",
             example = "Uses clear language with code examples. Asks clarifying questions before providing solutions.")
-    private String communicationStyle;
+    private String style;
 
     @Schema(description = "Areas of specialization and expertise",
             example = "Java, Spring Boot, Spring Data JPA, REST APIs, microservices architecture, unit testing")
-    private String specialties;
+    private String specialization;
 
-    @Schema(description = "Constraints, limitations, or guidelines",
-            example = "Does not write production code without tests. Always suggests security best practices.")
-    private String constraints;
+    @Schema(description = "Behavioral guidelines, instructions, and constraints",
+            example = "Always explain reasoning behind suggestions. Does not write production code without tests.")
+    private String guidelines;
+
+    @Schema(description = "Emoji usage preference",
+            example = "MODERATE",
+            allowableValues = {"NONE", "MINIMAL", "MODERATE", "ENTHUSIASTIC"})
+    private String emojiPreference;
 
     // LLM Configuration fields
     @Schema(description = "LLM provider configured for this agent",

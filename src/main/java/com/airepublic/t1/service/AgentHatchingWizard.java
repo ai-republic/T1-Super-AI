@@ -53,7 +53,7 @@ public class AgentHatchingWizard {
 
 
             // Create CHARACTER.md
-            agentConfigService.createCharacterMd(config, AgentConfigService.getCharacterBehaviorTemplate());
+            agentConfigService.createCharacterMd(config, AgentConfigService.getCharacterGuidlinesTemplate());
 
             // Create USAGE.md
             agentConfigService.createUsageMd(agentName, config);
@@ -171,7 +171,8 @@ public class AgentHatchingWizard {
         final String style = hatchData.get("communication_style");
         final String emojiPreference = hatchData.getOrDefault("emoji_preference", "sparingly");
 
-        final IndividualAgentConfig config = new IndividualAgentConfig(agentName, role, purpose, specialization, style, personality, emojiPreference, "active", LocalDateTime.now(), LocalDateTime.now(), provider, model);
+        final IndividualAgentConfig config = new IndividualAgentConfig(agentName, role, purpose, specialization, style, personality, emojiPreference, AgentConfigService.getCharacterGuidlinesTemplate(), "active", LocalDateTime.now(),
+                LocalDateTime.now(), provider, model);
 
         return config;
     }

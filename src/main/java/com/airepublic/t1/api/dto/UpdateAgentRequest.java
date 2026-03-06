@@ -29,16 +29,20 @@ public class UpdateAgentRequest {
 
     @Schema(description = "Communication style preferences",
             example = "Uses clear, concise language with code examples")
-    private String communicationStyle;
+    private String style;
 
     @Schema(description = "Areas of specialization and expertise",
             example = "Java, Spring Boot, REST APIs, database design")
     private String specialization;
 
     @Schema(description = "Emoji usage preference",
-            example = "sparingly",
-            allowableValues = {"freely", "sparingly", "none"})
+            example = "MODERATE",
+            allowableValues = {"NONE", "MINIMAL", "MODERATE", "ENTHUSIASTIC"})
     private String emojiPreference;
+
+    @Schema(description = "Behavioral guidelines, instructions, and constraints",
+            example = "Always explain reasoning behind suggestions. Does not write production code without tests.")
+    private String guidelines;
 
     @Schema(description = "LLM provider to use", example = "OPENAI", allowableValues = {"OPENAI", "ANTHROPIC", "OLLAMA"})
     private LLMProvider provider;

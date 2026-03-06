@@ -1,6 +1,7 @@
 package com.airepublic.t1.api.dto;
 
 import com.airepublic.t1.model.AgentConfiguration.LLMProvider;
+
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -46,10 +47,10 @@ public class CreateAgentRequest {
             required = false)
     private String emojiPreference;
 
-    @Schema(description = "Constraints, limitations, or guidelines",
+    @Schema(description = "Guidelines, Constraints, limitations",
             example = "Does not write production database queries without explicit approval. Always suggests security best practices.",
             required = false)
-    private String constraints;
+    private String guidelines;
 
     // Agent configuration fields
     @Schema(description = "Context or system prompt for the agent",

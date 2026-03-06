@@ -245,37 +245,40 @@ public class AgentConfigService {
                 "**Status:** active\n" +
                 "**Date Created:** {{CREATED_DATE}}\n" +
                 "**Last Modified:** {{MODIFIED_DATE}}\n\n" +
-                "## 🎭 Agent Identity\n\n" +
+                "## 🎭 Agent Identity\n" +
                 "**Agent Name:** {{NAME}}\n" +
-                "**Agent Role:** {{ROLE}}\n" +
+                "**Role:** {{ROLE}}\n" +
                 "**Purpose:** {{PURPOSE}}\n" +
                 "**Specialization:** {{SPECIALIZATION}}\n\n" +
-                "## 🤖 LLM Configuration\n\n" +
+                "## 🤖 LLM Configuration\n" +
                 "**Provider:** {{PROVIDER}}\n" +
                 "**Model:** {{MODEL}}\n\n" +
-                "## 💬 Communication Profile\n\n" +
+                "## 💬 Communication Profile\n" +
                 "**Style:** {{STYLE}}\n" +
                 "**Personality:** {{PERSONALITY}}\n" +
-                "**Emoji Preference:** {{EMOJI_PREFERENCE}}\n\n";
+                "**Emoji Preference:** {{EMOJI_PREFERENCE}}\n\n" +
+                "## 📋 Environment\n" +
+                "**Workspace**: the application workspace is located in '~/.t1-super-ai' for linux or '%USERPROFILE%/.t1-super-ai' for Windows, where you find all configurations, including '/agents', '/plugins', '/mcp-servers', '/skills' and 'USER.md'.\n"
+                +
+                "**Your workspace/Agent folder**: your workspace is located in '~/.t1-super-ai/agents/{{NAME}}' for linux or '%USERPROFILE%/.t1-super-ai/agents/{{NAME}}' for Windows, where you find the 'USAGE.md' and 'credentials.json'.\n\n" +
+                "### MCP Servers\n" +
+                "You are connected to a local MCP server that provides core tools that give you read/write access, bash and cmd to execute commands, web_search to search the web.\n" +
+                "External MCP server configurations can be found under the workspace folder '/mcpservers'.\n\n" +
+                "## Skills\n" +
+                "Custom skills can be found in the workspace folder '/skills'.\n\n" +
+                "### Plugins and tools\n" +
+                "Custom plugins (each containing multiple tools) can be found in the workspace folder '/plugins'. Each tool has a 'plugins.json' file defining the tool and a README.md how to use each tool.\n\n" +
+                "---\n" +
+                "For more information on structure and configuration new or existing tools, plugins, MCP servers, and skills, please refer to the 'USAGE.md' in your agent folder.\n\n" +
+                "---\n\n" +
+                "**Guidelines:**\n" +
+                "{{GUIDELINES}}\n\n";
     }
 
-    public static String getCharacterBehaviorTemplate() {
-        return "**Your workspace**: Your workspace where you find all configurations, including /agents, /plugins, /mcp-servers, /skills, USAGE.MD, USER.md and credentials.json, is in the users home directory '.t1-super-ai' folder.\n\n" +
-                "## General behavioral guidelines\n" +
-                "- Always align with the user's preferences and work focus (see USER.md)\n" +
+    public static String getCharacterGuidlinesTemplate() {
+        return "- Always align with the user's preferences and work focus (see USER.md)\n" +
                 "- Do not ask too many questions unless you are unsure\n" +
-                "- Ask if you need credentials to access resources unless they are already defined in your 'credentials.json' file.\n\n" +
-                "## MCP Servers\n" +
-                "You are connected to a local MCP server that provides core tools that give you read/write access, bash and cmd to execute commands, web_search to search the web.\n" +
-                "External MCP server configurations can be found under the users home directory in the folder 'mcpservers'\n\n" +
-                "## Skills\n" +
-                "Custom skills can be found in your workspace in the folder 'skills'\n\n" +
-                "## Plugins and tools\n" +
-                "Custom plugins (each containing multiple tools) can be found in your workspace in the folder 'plugins'. Each tool has a 'plugins.json' file defining the tool and a README.md how to use each tool.\n\n" +
-                "---\n\n" +
-                "For more information on configuring tools, plugins, MCP servers, and skills, please refer to the USAGE.md and CONFIGURATION_GUIDE.md files in your workspace.\n\n" +
-                "---\n\n" +
-                "_This file is automatically loaded as context for every session._\n";
+                "- Ask if you need credentials to access resources unless they are already defined in your agent folder 'credentials.json' file.\n\n";
     }
 
     /**
@@ -296,9 +299,10 @@ public class AgentConfigService {
                 .replace("{{SPECIALIZATION}}", config.getSpecialization() != null ? config.getSpecialization() : "General assistance")
                 .replace("{{PROVIDER}}", config.getProvider() != null ? config.getProvider().name() : "OPENAI")
                 .replace("{{MODEL}}", config.getModel() != null ? config.getModel() : "gpt-4")
-                .replace("{{STYLE}}", config.getPersonality() != null ? config.getPersonality() : "Professional and Friendly")
+                .replace("{{STYLE}}", config.getStyle() != null ? config.getStyle() : "Professional and Friendly")
                 .replace("{{PERSONALITY}}", config.getPersonality() != null ? config.getPersonality() : "Thorough and detail-oriented")
-                .replace("{{EMOJI_PREFERENCE}}", config.getEmojiPreference() != null ? config.getEmojiPreference() : "Sparingly"));
+                .replace("{{EMOJI_PREFERENCE}}", config.getEmojiPreference() != null ? config.getEmojiPreference() : "Sparingly")
+                .replace("{{GUIDELINES}}", config.getGuidelines() != null ? config.getGuidelines() : getCharacterGuidlinesTemplate()));
         content.append("\n\n").append(behaviorContent);
 
         Files.writeString(characterFile, content.toString(), StandardCharsets.UTF_8);
@@ -339,37 +343,79 @@ public class AgentConfigService {
         String style = null;
         String personality = null;
         String emojiPreference = null;
+        String guidelines = null;
 
         final String[] lines = content.split("\n");
-        for (String line : lines) {
-            line = line.trim();
+        boolean parsingGuidelines = false;
+        final StringBuilder guidelinesBuilder = new StringBuilder();
 
-            if (line.startsWith("**Status:**")) {
-                status = line.substring("**Status:**".length()).trim();
-            } else if (line.startsWith("**Date Created:**")) {
-                dateCreated = line.substring("**Date Created:**".length()).trim();
-            } else if (line.startsWith("**Last Modified:**")) {
-                lastUpdated = line.substring("**Last Modified:**".length()).trim();
-            } else if (line.startsWith("**Agent Name:**")) {
-                name = line.substring("**Agent Name:**".length()).trim();
-            } else if (line.startsWith("**Role:**")) {
-                role = line.substring("**Role:**".length()).trim();
-            } else if (line.startsWith("**Purpose:**")) {
-                purpose = line.substring("**Purpose:**".length()).trim();
-            } else if (line.startsWith("**Specialization:**")) {
-                specialization = line.substring("**Specialization:**".length()).trim();
-            } else if (line.startsWith("**Provider:**")) {
-                provider = line.substring("**Provider:**".length()).trim();
-            } else if (line.startsWith("**Model:**")) {
-                model = line.substring("**Model:**".length()).trim();
-            } else if (line.startsWith("**Style:**")) {
-                style = line.substring("**Style:**".length()).trim();
-            } else if (line.startsWith("**Personality:**")) {
-                personality = line.substring("**Personality:**".length()).trim();
-            } else if (line.startsWith("**Emoji Preference:**")) {
-                emojiPreference = line.substring("**Emoji Preference:**".length()).trim();
+        for (int i = 0; i < lines.length; i++) {
+            final String line = lines[i];
+            final String trimmed = line.trim();
+
+            // Check for section markers
+            if (trimmed.startsWith("**Status:**")) {
+                status = trimmed.substring("**Status:**".length()).trim();
+                parsingGuidelines = false;
+            } else if (trimmed.startsWith("**Date Created:**")) {
+                dateCreated = trimmed.substring("**Date Created:**".length()).trim();
+                parsingGuidelines = false;
+            } else if (trimmed.startsWith("**Last Modified:**")) {
+                lastUpdated = trimmed.substring("**Last Modified:**".length()).trim();
+                parsingGuidelines = false;
+            } else if (trimmed.startsWith("**Agent Name:**")) {
+                name = trimmed.substring("**Agent Name:**".length()).trim();
+                parsingGuidelines = false;
+            } else if (trimmed.startsWith("**Role:**")) {
+                role = trimmed.substring("**Role:**".length()).trim();
+                parsingGuidelines = false;
+            } else if (trimmed.startsWith("**Purpose:**")) {
+                purpose = trimmed.substring("**Purpose:**".length()).trim();
+                parsingGuidelines = false;
+            } else if (trimmed.startsWith("**Specialization:**")) {
+                specialization = trimmed.substring("**Specialization:**".length()).trim();
+                parsingGuidelines = false;
+            } else if (trimmed.startsWith("**Provider:**")) {
+                provider = trimmed.substring("**Provider:**".length()).trim();
+                parsingGuidelines = false;
+            } else if (trimmed.startsWith("**Model:**")) {
+                model = trimmed.substring("**Model:**".length()).trim();
+                parsingGuidelines = false;
+            } else if (trimmed.startsWith("**Style:**")) {
+                style = trimmed.substring("**Style:**".length()).trim();
+                parsingGuidelines = false;
+            } else if (trimmed.startsWith("**Personality:**")) {
+                personality = trimmed.substring("**Personality:**".length()).trim();
+                parsingGuidelines = false;
+            } else if (trimmed.startsWith("**Emoji Preference:**")) {
+                emojiPreference = trimmed.substring("**Emoji Preference:**".length()).trim();
+                parsingGuidelines = false;
+            } else if (trimmed.startsWith("**Guidelines:**")) {
+                // Stop parsing constraints, start parsing guidelines
+                parsingGuidelines = true;
+                // Get any text on the same line after the marker
+                final String inlineContent = trimmed.substring("**Guidelines:**".length()).trim();
+                if (!inlineContent.isEmpty()) {
+                    guidelinesBuilder.append(inlineContent);
+                }
+            } else if (parsingGuidelines) {
+                // Continue collecting guidelines content until we hit ## or end of file
+                if (guidelinesBuilder.length() > 0) {
+                    guidelinesBuilder.append("\n");
+                }
+                guidelinesBuilder.append(line);
             }
         }
+
+        // Finalize multi-line content
+        if (guidelinesBuilder.length() > 0) {
+            guidelines = guidelinesBuilder.toString().trim();
+        }
+
+        // Debug logging to see what was parsed
+        log.debug("Parsed from CHARACTER.md for '{}': role='{}', guidelines='{}'", agentName, role, guidelines);
+        log.debug("All parsed values - status='{}', provider='{}', model='{}', style='{}', personality='{}', emojiPreference='{}'",
+                  status, provider, model, style, personality, emojiPreference);
 
         // Create config from parsed data
         final IndividualAgentConfig config = new IndividualAgentConfig();
@@ -385,6 +431,10 @@ public class AgentConfigService {
         config.setStyle(style != null ? style : "Professional and Friendly");
         config.setPersonality(personality != null ? personality : "Thorough and detail-oriented");
         config.setEmojiPreference(emojiPreference != null ? emojiPreference : "Sparingly");
+        config.setGuidelines(guidelines);
+
+        log.info("📋 Loaded CHARACTER.md for '{}': role='{}', style='{}', hasGuidelines={}",
+                 agentName, config.getRole(), config.getStyle(), (guidelines != null && !guidelines.isEmpty()));
 
         try {
             config.setProvider(com.airepublic.t1.model.AgentConfiguration.LLMProvider.valueOf(provider.toUpperCase()));

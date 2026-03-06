@@ -2,6 +2,7 @@ package com.airepublic.t1.api.controller;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import org.springframework.http.ResponseEntity;
@@ -167,12 +168,13 @@ public class AgentController {
                                     request.getSpecialization() != null ? request.getSpecialization() : "General assistance", // specialization
                                             request.getCommunicationStyle() != null ? request.getCommunicationStyle() : "Clear and concise", // style
                                                     request.getPersonality() != null ? request.getPersonality() : "Professional and helpful", // personality
-                                                            request.getEmojiPreference() != null ? request.getEmojiPreference() : "sparingly", // emojiPreference
-                                                                    "active",                                                                       // status
-                                                                    java.time.LocalDateTime.now(),                                                  // createdAt
-                                                                    java.time.LocalDateTime.now(),                                                  // lastModifiedAt
-                                                                    defaultProvider,                                                                // provider
-                                                                    defaultModel                                                                    // model
+                                                            request.getEmojiPreference() != null ? request.getEmojiPreference() : "MODERATE", // emojiPreference
+                                                                    request.getGuidelines() != null ? request.getGuidelines() : AgentConfigService.getCharacterGuidlinesTemplate(), // guidelines // guidelines
+                                                                            "active",                                                                       // status
+                                                                            java.time.LocalDateTime.now(),                                                  // createdAt
+                                                                            java.time.LocalDateTime.now(),                                                  // lastModifiedAt
+                                                                            defaultProvider,                                                                // provider
+                                                                            defaultModel                                                                    // model
                     );
 
             // Create the agent
@@ -182,7 +184,7 @@ public class AgentController {
             agentConfigService.createAgentFolder(request.getName());
 
             // Create CHARACTER.md with full configuration
-            agentConfigService.createCharacterMd(config, AgentConfigService.getCharacterBehaviorTemplate());
+            agentConfigService.createCharacterMd(config, AgentConfigService.getCharacterGuidlinesTemplate());
 
             // Create USAGE.md
             agentConfigService.createUsageMd(request.getName(), config);
@@ -226,30 +228,19 @@ public class AgentController {
 
             final Agent agent = agentManager.getAgent(name);
             final String currentAgentName = agentManager.getCurrentAgentName();
-            final IndividualAgentConfig config = agent.getConfig();
 
-            // Try to read CHARACTER.md to get additional details
-            String characterMd = null;
-            String purpose = null;
-            String personality = null;
-            String communicationStyle = null;
-            String specialties = null;
-            String constraints = null;
-
+            // Load full configuration from CHARACTER.md using AgentConfigService
+            IndividualAgentConfig config = null;
             try {
-                characterMd = agentConfigService.readCharacterMd(name);
-                if (characterMd != null) {
-                    // Parse CHARACTER.md to extract fields
-                    purpose = extractFromCharacterMd(characterMd, "Purpose");
-                    personality = extractFromCharacterMd(characterMd, "Personality");
-                    communicationStyle = extractFromCharacterMd(characterMd, "Communication Style");
-                    specialties = extractFromCharacterMd(characterMd, "Specialties");
-                    constraints = extractFromCharacterMd(characterMd, "Constraints");
-                }
+                config = agentConfigService.loadIndividualAgentConfig(name);
+                log.debug("Loaded CHARACTER.md config for agent: {}", name);
             } catch (final Exception e) {
-                log.warn("Could not read CHARACTER.md for agent: {}", name, e);
+                log.warn("Could not load CHARACTER.md for agent '{}', using in-memory config: {}", name, e.getMessage());
+                // Fallback to in-memory config if CHARACTER.md is not available
+                config = agent.getConfig();
             }
 
+            // Build AgentDetails with all fields from config
             final AgentDetails agentDetails = AgentDetails.builder()
                     .name(agent.getName())
                     .status(agent.getStatus())
@@ -258,13 +249,14 @@ public class AgentController {
                     .conversationCount(agent.getConversationHistory().size())
                     .isCurrentAgent(agent.getName().equals(currentAgentName))
                     .role(config != null ? config.getRole() : null)
-                    .purpose(purpose != null ? purpose : (config != null ? config.getPurpose() : null))
-                    .personality(personality != null ? personality : (config != null ? config.getPersonality() : null))
-                    .communicationStyle(communicationStyle != null ? communicationStyle : (config != null ? config.getStyle() : null))
-                    .specialties(specialties != null ? specialties : (config != null ? config.getSpecialization() : null))
-                    .constraints(constraints)
+                    .purpose(config != null ? config.getPurpose() : null)
+                    .specialization(config != null ? config.getSpecialization() : null)
                     .provider(config != null ? config.getProvider() : null)
                     .model(config != null ? config.getModel() : null)
+                    .style(config != null ? config.getStyle() : null)
+                    .personality(config != null ? config.getPersonality() : null)
+                    .emojiPreference(config != null ? config.getEmojiPreference() : null)
+                    .guidelines(config != null ? config.getGuidelines() : null)
                     .build();
 
             return ResponseEntity.ok(com.airepublic.t1.api.dto.ApiResponse.success(agentDetails));
@@ -274,45 +266,6 @@ public class AgentController {
             return ResponseEntity.internalServerError()
                     .body(com.airepublic.t1.api.dto.ApiResponse.error("Error retrieving agent: " + e.getMessage()));
         }
-    }
-
-    /**
-     * Helper method to extract a field value from CHARACTER.md
-     */
-    private String extractFromCharacterMd(final String characterMd, final String fieldName) {
-        if (characterMd == null) {
-            return null;
-        }
-
-        final String marker = "## " + fieldName;
-        int startIdx = characterMd.indexOf(marker);
-        if (startIdx == -1) {
-            return null;
-        }
-
-        startIdx = characterMd.indexOf("\n", startIdx) + 1;
-        int endIdx = characterMd.indexOf("\n##", startIdx);
-        if (endIdx == -1) {
-            endIdx = characterMd.indexOf("\n\n##", startIdx);
-        }
-        if (endIdx == -1) {
-            endIdx = characterMd.length();
-        }
-
-        String value = characterMd.substring(startIdx, endIdx).trim();
-        // Remove markdown formatting
-        value = value.replace("- **Name**:", "")
-                .replace("- **Role**:", "")
-                .replace("- **Purpose**:", "")
-                .trim();
-
-        // If it's a list item, get the content after the colon
-        if (value.contains(":")) {
-            final int colonIdx = value.lastIndexOf(":");
-            value = value.substring(colonIdx + 1).trim();
-        }
-
-        return value.isEmpty() ? null : value;
     }
 
     @Operation(
@@ -411,11 +364,17 @@ public class AgentController {
     public ResponseEntity<com.airepublic.t1.api.dto.ApiResponse<AgentInfo>> getCurrentAgent() {
         try {
             final String currentAgentName = agentManager.getCurrentAgentName();
-            final Agent agent = agentManager.listAgents().stream()
+            final Optional<Agent> agentOpt = agentManager.listAgents().stream()
                     .filter(a -> a.getName().equals(currentAgentName))
-                    .findFirst()
-                    .orElseThrow();
+                    .findFirst();
 
+            // If no current agent is set or found, return 204 No Content
+            if (agentOpt.isEmpty()) {
+                log.info("No current agent selected");
+                return ResponseEntity.status(204).build();
+            }
+
+            final Agent agent = agentOpt.get();
             final AgentInfo agentInfo = AgentInfo.builder()
                     .name(agent.getName())
                     .status(agent.getStatus())
@@ -459,7 +418,17 @@ public class AgentController {
             }
 
             final Agent agent = agentManager.getAgent(name);
-            IndividualAgentConfig config = agent.getConfig();
+
+            // Load config from CHARACTER.md to get latest values
+            IndividualAgentConfig config = null;
+            try {
+                config = agentConfigService.loadIndividualAgentConfig(name);
+                log.debug("Loaded CHARACTER.md config for update: {}", name);
+            } catch (final Exception e) {
+                log.warn("Could not load CHARACTER.md for agent '{}', using in-memory config: {}", name, e.getMessage());
+                // Fallback to in-memory config
+                config = agent.getConfig();
+            }
 
             // If no config exists, create one
             if (config == null) {
@@ -480,11 +449,14 @@ public class AgentController {
             if (request.getPersonality() != null) {
                 config.setPersonality(request.getPersonality());
             }
-            if (request.getCommunicationStyle() != null) {
-                config.setStyle(request.getCommunicationStyle());
+            if (request.getStyle() != null) {
+                config.setStyle(request.getStyle());
             }
             if (request.getEmojiPreference() != null) {
                 config.setEmojiPreference(request.getEmojiPreference());
+            }
+            if (request.getGuidelines() != null) {
+                config.setGuidelines(request.getGuidelines());
             }
             if (request.getProvider() != null) {
                 config.setProvider(request.getProvider());

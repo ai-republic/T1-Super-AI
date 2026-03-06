@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Property definitions -->
+    <property name="LOG_FILE" value="logs/application.log"/>
+    <property name="LOG_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"/>
+
+    <!-- File appender - Rolling file policy -->
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_FILE}</file>
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+
+        <!-- Rolling policy -->
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <!-- Daily rollover -->
+            <fileNamePattern>logs/application-%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <!-- Each file should be at most 10MB, keep 30 days worth of history -->
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <!-- Total size of all archive files -->
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Root logger - only FILE appender (no console) -->
+    <root level="WARN">
+        <appender-ref ref="FILE"/>
+    </root>
+
+    <!-- Application logger -->
+    <logger name="com.airepublic.t1" level="INFO" additivity="false">
+        <appender-ref ref="FILE"/>
+    </logger>
+
+    <!-- Reduce noise from Spring framework -->
+    <logger name="org.springframework" level="WARN"/>
+    <logger name="org.apache.catalina" level="WARN"/>
+    <logger name="org.apache.coyote" level="WARN"/>
+    <logger name="org.apache.tomcat" level="WARN"/>
+    <logger name="org.hibernate" level="WARN"/>
+
+    <!-- Spring AI logging -->
+    <logger name="org.springframework.ai" level="INFO"/>
+
+    <!-- HTTP client logging (for debugging API calls) -->
+    <logger name="org.springframework.web.client" level="WARN"/>
+    <logger name="reactor.netty" level="WARN"/>
+</configuration>

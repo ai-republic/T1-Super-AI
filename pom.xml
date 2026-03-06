@@ -16,7 +16,7 @@
     <artifactId>t1-super-ai</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <name>T1 - Super AI</name>
-    <description>T1 Super AI - Advanced AI agent platform with multi-agent support usable via REST API and CLI interface</description>
+    <description>T1 Super AI - Advanced AI agent platform with multi-agent support. Provides both Web UI (default) and standalone CLI interface with REST API backend.</description>
 
     <properties>
         <java.version>25</java.version>
@@ -58,6 +58,10 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
         </dependency>
 
         <!-- Spring AI 2.0 - New artifact names -->
@@ -219,6 +223,10 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
+                    <!-- Default main class is the Web Application -->
+                    <mainClass>com.airepublic.t1.T1SuperAiApplication</mainClass>
+                    <!-- Enable PropertiesLauncher to allow alternative main class -->
+                    <layout>ZIP</layout>
                     <excludes>
                         <exclude>
                             <groupId>org.projectlombok</groupId>

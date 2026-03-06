@@ -3,7 +3,6 @@ package com.airepublic.t1.cli;
 import static org.fusesource.jansi.Ansi.ansi;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -140,7 +139,7 @@ public class SplitPaneCLI implements CLI {
 
             // Switch to default agent from USER.md or first available agent
             try {
-                com.airepublic.t1.config.AgentConfigService.UserInfo userInfo = agentConfigService.readUserInfo();
+                final com.airepublic.t1.config.AgentConfigService.UserInfo userInfo = agentConfigService.readUserInfo();
                 log.info("Read USER.md - default agent: '{}'", userInfo.defaultAgent);
 
                 if (userInfo.defaultAgent != null && !userInfo.defaultAgent.isEmpty()) {
@@ -149,9 +148,9 @@ public class SplitPaneCLI implements CLI {
                         log.info("✅ Switched to default agent: {}", userInfo.defaultAgent);
                     } else {
                         log.warn("⚠️ Default agent '{}' not found. Switching to first available agent.", userInfo.defaultAgent);
-                        java.util.List<com.airepublic.t1.agent.Agent> agents = agentManager.listAgents();
+                        final java.util.List<com.airepublic.t1.agent.Agent> agents = agentManager.listAgents();
                         if (!agents.isEmpty()) {
-                            String firstAgent = agents.get(0).getName();
+                            final String firstAgent = agents.get(0).getName();
                             agentManager.switchToAgent(firstAgent);
                             log.info("✅ Switched to first available agent: {}", firstAgent);
                         } else {
@@ -160,17 +159,17 @@ public class SplitPaneCLI implements CLI {
                     }
                 } else {
                     log.warn("⚠️ No default agent specified in USER.md");
-                    java.util.List<com.airepublic.t1.agent.Agent> agents = agentManager.listAgents();
+                    final java.util.List<com.airepublic.t1.agent.Agent> agents = agentManager.listAgents();
                     log.info("Found {} agents loaded in memory", agents.size());
                     if (!agents.isEmpty()) {
-                        String firstAgent = agents.get(0).getName();
+                        final String firstAgent = agents.get(0).getName();
                         agentManager.switchToAgent(firstAgent);
                         log.info("✅ Switched to first available agent: {}", firstAgent);
                     } else {
                         log.error("❌ No agents available!");
                     }
                 }
-            } catch (Exception e) {
+            } catch (final Exception e) {
                 log.error("❌ Error during agent switching at startup", e);
             }
 
@@ -1372,6 +1371,7 @@ public class SplitPaneCLI implements CLI {
                     commStyle,              // style
                     personality,            // personality
                     emojiPreference,        // emojiPreference
+                    AgentConfigService.getCharacterGuidlinesTemplate(), // guidelines
                     "active",               // status
                     java.time.LocalDateTime.now(),  // createdAt
                     java.time.LocalDateTime.now(),  // lastModifiedAt
@@ -1388,7 +1388,7 @@ public class SplitPaneCLI implements CLI {
 
             // Create CHARACTER.md with behavior template
             try {
-                agentConfigService.createCharacterMd(agentConfig, AgentConfigService.getCharacterBehaviorTemplate());
+                agentConfigService.createCharacterMd(agentConfig, AgentConfigService.getCharacterGuidlinesTemplate());
                 printOutput("");
                 printOutput("✅ CHARACTER.md created");
             } catch (final Exception e) {

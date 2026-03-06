@@ -97,6 +97,7 @@ public class HatchingService {
                     style,                                              // style
                     personality,                                        // personality
                     emojiPreference,                                    // emojiPreference
+                    AgentConfigService.getCharacterGuidlinesTemplate(), // guidelines
                     "active",                                           // status
                     LocalDateTime.now(), // createdAt
                     LocalDateTime.now(), // lastModifiedAt
@@ -105,7 +106,7 @@ public class HatchingService {
                     );
 
             // Create CHARACTER.md for the agent
-            agentConfigService.createCharacterMd(config, AgentConfigService.getCharacterBehaviorTemplate());
+            agentConfigService.createCharacterMd(config, AgentConfigService.getCharacterGuidlinesTemplate());
             log.info("📄 Created CHARACTER.md for agent '{}'", agentName);
 
             // Create USAGE.md for the agent
