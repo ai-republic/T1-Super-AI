@@ -45,7 +45,7 @@ public class Agent {
     public Agent(String name, AgentOrchestrator orchestrator) {
         this.name = name;
         this.orchestrator = orchestrator;
-        this.status = "idle";
+        this.status = "active";
         this.createdAt = LocalDateTime.now();
         this.lastActiveAt = LocalDateTime.now();
         this.conversationHistory = new ArrayList<>();
@@ -93,8 +93,7 @@ public class Agent {
                 // Wait for input message (blocking)
                 String input = inputQueue.take();
 
-                // Update status
-                status = "active";
+                // Update last active time
                 lastActiveAt = LocalDateTime.now();
 
                 // Process message through orchestrator
@@ -105,9 +104,6 @@ public class Agent {
 
                 // Put response in output queue
                 outputQueue.put(response);
-
-                // Update status
-                status = "idle";
 
             } catch (InterruptedException e) {
                 // Thread interrupted, check if we should stop

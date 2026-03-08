@@ -73,11 +73,13 @@ public class AgentController {
             final List<AgentInfo> agents = agentManager.listAgents().stream()
                     .map(agent -> {
                         final IndividualAgentConfig config = agent.getConfig();
+                        // Prefer status from config (CHARACTER.md), fallback to agent status
+                        final String status = (config != null && config.getStatus() != null) ? config.getStatus() : agent.getStatus();
                         return AgentInfo.builder()
                                 .name(agent.getName())
                                 .role(config != null ? config.getRole() : null)
                                 .purpose(config != null ? config.getPurpose() : null)
-                                .status(agent.getStatus())
+                                .status(status)
                                 .createdAt(agent.getCreatedAt())
                                 .lastActiveAt(agent.getLastActiveAt())
                                 .conversationCount(agent.getConversationHistory().size())
@@ -241,9 +243,11 @@ public class AgentController {
             }
 
             // Build AgentDetails with all fields from config
+            // Prefer status from config (CHARACTER.md), fallback to agent status
+            final String status = (config != null && config.getStatus() != null) ? config.getStatus() : agent.getStatus();
             final AgentDetails agentDetails = AgentDetails.builder()
                     .name(agent.getName())
-                    .status(agent.getStatus())
+                    .status(status)
                     .createdAt(agent.getCreatedAt())
                     .lastActiveAt(agent.getLastActiveAt())
                     .conversationCount(agent.getConversationHistory().size())
@@ -375,9 +379,12 @@ public class AgentController {
             }
 
             final Agent agent = agentOpt.get();
+            final IndividualAgentConfig config = agent.getConfig();
+            // Prefer status from config (CHARACTER.md), fallback to agent status
+            final String status = (config != null && config.getStatus() != null) ? config.getStatus() : agent.getStatus();
             final AgentInfo agentInfo = AgentInfo.builder()
                     .name(agent.getName())
-                    .status(agent.getStatus())
+                    .status(status)
                     .createdAt(agent.getCreatedAt())
                     .lastActiveAt(agent.getLastActiveAt())
                     .conversationCount(agent.getConversationHistory().size())

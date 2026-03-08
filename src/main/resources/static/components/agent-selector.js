@@ -103,31 +103,25 @@ class AgentSelector extends HTMLElement {
 
         listContainer.innerHTML = this.agents.map(agent => {
             const isActive = agent.name === this.currentAgent || agent.isCurrentAgent;
-            const statusIcon = agent.status === 'ACTIVE' ? '🟢' : '🔴';
+            // Debug: log the actual status value
+            console.log(`Agent: ${agent.name}, Status: "${agent.status}", Type: ${typeof agent.status}`);
+            const statusIcon = (agent.status && agent.status.toLowerCase() === 'active') ? '🟢' : '🔴';
             const colorClass = this.getAgentColorClass(agent.name);
 
             return `
                 <div class="agent-card ${isActive ? 'agent-active' : ''} ${colorClass}"
                      data-agent="${agent.name}"
                      onclick="agentSelector.selectAgent('${agent.name}')">
-                    <div class="agent-card-header">
-                        <div class="agent-name">${agent.name}</div>
-                        <div class="agent-status">${statusIcon}</div>
-                    </div>
-                    <div class="agent-role">${agent.role || 'No role specified'}</div>
-                    <div class="agent-stats">
-                        <span class="stat-item">
-                            <span class="icon">💬</span>
-                            ${agent.conversationCount || 0}
-                        </span>
-                    </div>
-                    <div class="agent-actions">
-                        <button class="btn-icon" onclick="event.stopPropagation(); agentSelector.editAgent('${agent.name}')" title="Edit">
-                            ✏️
-                        </button>
-                        <button class="btn-icon" onclick="event.stopPropagation(); agentSelector.deleteAgent('${agent.name}')" title="Delete">
-                            🗑️
-                        </button>
+                    <div class="agent-card-content">
+                        <div class="agent-info">
+                            <div class="agent-name">${agent.name}</div>
+                            <div class="agent-role">${agent.role || 'No role specified'}</div>
+                        </div>
+                        <div class="agent-controls">
+                            <div class="agent-status-indicator">${statusIcon}</div>
+                            <button class="btn-icon-small" onclick="event.stopPropagation(); agentSelector.editAgent('${agent.name}')" title="Edit">✏️</button>
+                            <button class="btn-icon-small" onclick="event.stopPropagation(); agentSelector.deleteAgent('${agent.name}')" title="Delete">🗑️</button>
+                        </div>
                     </div>
                 </div>
             `;
