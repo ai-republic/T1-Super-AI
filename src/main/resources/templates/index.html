@@ -94,12 +94,16 @@
         </div>
     </div>
 
+    <!-- Setup Wizard (shown on first run) -->
+    <setup-wizard></setup-wizard>
+
     <!-- Web Components -->
     <script type="module" th:src="@{/components/chat-component.js}"></script>
     <script type="module" th:src="@{/components/agent-selector.js}"></script>
     <script type="module" th:src="@{/components/config-editor.js}"></script>
     <script type="module" th:src="@{/components/character-editor.js}"></script>
     <script type="module" th:src="@{/components/create-agent-form.js}"></script>
+    <script type="module" th:src="@{/components/setup-wizard.js}"></script>
 
     <!-- Utilities -->
     <script th:src="@{/js/utils.js}"></script>

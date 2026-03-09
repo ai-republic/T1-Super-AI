@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Wizard</title>
+    <link rel="stylesheet" href="src/main/resources/static/css/styles.css">
+</head>
+<body>
+    <h1>Wizard Test</h1>
+    <button onclick="showWizard()">Show Wizard</button>
+
+    <setup-wizard></setup-wizard>
+
+    <script type="module" src="src/main/resources/static/components/setup-wizard.js"></script>
+
+    <script>
+        function showWizard() {
+            const wizard = document.querySelector('setup-wizard');
+            if (wizard) {
+                wizard.show();
+            }
+        }
+
+        // Auto-show for testing
+        window.addEventListener('DOMContentLoaded', () => {
+            setTimeout(() => {
+                showWizard();
+            }, 500);
+        });
+    </script>
+</body>
+</html>

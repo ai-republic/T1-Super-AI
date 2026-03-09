@@ -13,7 +13,7 @@ const AppState = {
 /**
  * Initialize application
  */
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     console.log('T1 Super AI initializing...');
 
     // Initialize HTMX configuration
@@ -21,6 +21,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Setup authentication check
     checkAuthentication();
+
+    // Check if first-time setup is needed
+    await checkAndShowSetupWizard();
 
     // Setup global error handlers
     setupErrorHandlers();
@@ -65,6 +68,36 @@ function initializeHTMX() {
         document.body.addEventListener('htmx:afterRequest', (event) => {
             console.log('HTMX response:', event.detail.successful);
         });
+    }
+}
+
+/**
+ * Check if first-time setup wizard is needed
+ */
+async function checkAndShowSetupWizard() {
+    try {
+        const response = await fetch('/api/v1/setup/status');
+
+        if (response.ok) {
+            const result = await response.json();
+
+            if (result.success && result.data && result.data.needsSetup) {
+                console.log('🥚 First-time setup needed - showing wizard');
+
+                // Show the setup wizard
+                const wizard = document.querySelector('setup-wizard');
+                if (wizard) {
+                    wizard.show();
+                } else {
+                    console.error('Setup wizard component not found');
+                }
+            } else {
+                console.log('✅ Setup already completed');
+            }
+        }
+    } catch (error) {
+        console.error('Failed to check setup status:', error);
+        // Don't show error toast - setup check is optional
     }
 }
 
