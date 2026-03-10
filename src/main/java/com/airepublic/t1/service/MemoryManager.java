@@ -2,12 +2,15 @@ package com.airepublic.t1.service;
 
 import com.airepublic.t1.agent.LLMClientFactory;
 import com.airepublic.t1.config.AgentConfigurationManager;
+import com.airepublic.t1.memory.VectorMemoryService;
+import com.airepublic.t1.memory.VectorStoreFactory;
 import com.airepublic.t1.model.ConversationMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -19,9 +22,12 @@ import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Manages agent memory by storing conversations in MEMORY.md files.
+ * Manages agent memory by storing conversations in MEMORY.md files
+ * and optionally in vector store for semantic search.
  * Automatically compacts memory when it exceeds size limits.
  */
 @Slf4j
@@ -39,6 +45,12 @@ public class MemoryManager {
     @Autowired(required = false)
     private LLMClientFactory llmClientFactory;
 
+    @Autowired(required = false)
+    private VectorStoreFactory vectorStoreFactory;
+
+    // Cache of per-agent VectorMemoryService instances
+    private final Map<String, VectorMemoryService> agentVectorServices = new ConcurrentHashMap<>();
+
     /**
      * Get the path to an agent's memory file.
      */
@@ -51,6 +63,7 @@ public class MemoryManager {
     /**
      * Load memory content for an agent with size limit.
      * If memory exceeds limit, only loads recent content.
+     * If vector memory is available, also includes relevant context from semantic search.
      */
     public String loadMemory(String agentName) {
         try {
@@ -80,6 +93,49 @@ public class MemoryManager {
             log.error("Failed to load memory for agent '{}'", agentName, e);
             return "";
         }
+    }
+
+    /**
+     * Get or create VectorMemoryService for an agent.
+     */
+    private VectorMemoryService getVectorMemoryService(String agentName) {
+        if (vectorStoreFactory == null) {
+            return null;
+        }
+
+        return agentVectorServices.computeIfAbsent(agentName, name -> {
+            try {
+                VectorStore vectorStore = vectorStoreFactory.getVectorStore(name);
+                return new VectorMemoryService(vectorStore);
+            } catch (Exception e) {
+                log.error("Failed to create VectorMemoryService for agent '{}'", name, e);
+                return null;
+            }
+        });
+    }
+
+    /**
+     * Load memory with semantic context enhancement.
+     * Uses vector search to find relevant past conversations based on the query.
+     */
+    public String loadMemoryWithContext(String agentName, String currentQuery) {
+        String baseMemory = loadMemory(agentName);
+
+        // If vector memory is available, enhance with semantic search
+        VectorMemoryService vectorMemoryService = getVectorMemoryService(agentName);
+        if (vectorMemoryService != null && currentQuery != null && !currentQuery.isEmpty()) {
+            try {
+                String relevantContext = vectorMemoryService.getRelevantContext(currentQuery, 3);
+                if (!relevantContext.isEmpty()) {
+                    log.debug("Enhanced memory for agent '{}' with vector context", agentName);
+                    return baseMemory + "\n\n" + relevantContext;
+                }
+            } catch (Exception e) {
+                log.warn("Failed to enhance memory with vector context for agent '{}'", agentName, e);
+            }
+        }
+
+        return baseMemory;
     }
 
     /**
@@ -130,6 +186,7 @@ public class MemoryManager {
 
     /**
      * Append a conversation exchange to the agent's memory.
+     * Also stores in vector memory if available for semantic search.
      */
     public void appendConversation(String agentName, String userMessage, String assistantResponse) {
         try {
@@ -161,6 +218,16 @@ public class MemoryManager {
                 StandardOpenOption.APPEND);
 
             log.debug("Appended conversation to memory for agent '{}'", agentName);
+
+            // Store in vector memory if available
+            VectorMemoryService vectorMemoryService = getVectorMemoryService(agentName);
+            if (vectorMemoryService != null) {
+                try {
+                    vectorMemoryService.storePrompt(userMessage, assistantResponse, agentName, "agent");
+                } catch (Exception e) {
+                    log.warn("Failed to store conversation in vector memory for agent '{}'", agentName, e);
+                }
+            }
 
             // Check if compaction is needed
             checkAndCompactMemory(agentName);
