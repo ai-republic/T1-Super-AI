@@ -4,13 +4,124 @@ class ChatComponent extends HTMLElement {
         this.messages = [];
         this.currentAgent = null;
         this.isStreaming = false;
+        this.ws = null;
     }
 
     connectedCallback() {
         this.render();
         this.setupEventListeners();
+        this.setupWebSocket();
         // Don't load history here - it will be loaded when agent-changed event fires
         // after the agent selector loads the current agent
+    }
+
+    setupWebSocket() {
+        // Create WebSocket connection for real-time collaboration messages
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/chat`;
+
+        this.ws = new WebSocket(wsUrl);
+
+        this.ws.onopen = () => {
+            console.log('WebSocket connected');
+        };
+
+        this.ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                this.handleWebSocketMessage(data);
+            } catch (error) {
+                console.error('Error parsing WebSocket message:', error);
+            }
+        };
+
+        this.ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+        };
+
+        this.ws.onclose = () => {
+            console.log('WebSocket disconnected');
+            // Reconnect after 3 seconds
+            setTimeout(() => this.setupWebSocket(), 3000);
+        };
+    }
+
+    handleWebSocketMessage(data) {
+        switch (data.type) {
+            case 'tool_call':
+                this.addCollaborationMessage({
+                    type: 'tool_call',
+                    fromAgent: data.fromAgent,
+                    toolName: data.toolName,
+                    timestamp: data.timestamp
+                });
+                // Add waiting indicator
+                this.showWaitingIndicator(data.toolName);
+                break;
+            case 'tool_result':
+                // Remove waiting indicator
+                this.hideWaitingIndicator();
+                this.addCollaborationMessage({
+                    type: 'tool_result',
+                    fromAgent: data.fromAgent,
+                    toolName: data.toolName,
+                    toolResult: data.toolResult,
+                    success: data.success,
+                    responseTimeMs: data.responseTimeMs,
+                    timestamp: data.timestamp
+                });
+                break;
+            case 'agent_communication':
+                this.addCollaborationMessage({
+                    type: 'agent_communication',
+                    fromAgent: data.fromAgent,
+                    toAgent: data.toAgent,
+                    message: data.message,
+                    timestamp: data.timestamp
+                });
+                // Add waiting indicator for agent response
+                this.showWaitingIndicator(`${data.toAgent} processing...`);
+                break;
+            case 'agent_response':
+                // Remove waiting indicator
+                this.hideWaitingIndicator();
+                this.addCollaborationMessage({
+                    type: 'agent_response',
+                    fromAgent: data.fromAgent,
+                    toAgent: data.toAgent,
+                    response: data.response,
+                    responseTimeMs: data.responseTimeMs,
+                    timestamp: data.timestamp
+                });
+                break;
+        }
+    }
+
+    showWaitingIndicator(text) {
+        // Remove any existing waiting indicator first
+        this.hideWaitingIndicator();
+
+        const messagesContainer = this.querySelector('#chatMessages');
+        const waitingHTML = `
+            <div class="message message-waiting" id="waitingIndicator">
+                <div class="message-avatar">⏳</div>
+                <div class="message-bubble">
+                    <div class="message-content waiting-content">
+                        <div class="waiting-spinner"></div>
+                        <span class="waiting-text">${text || 'Waiting for response...'}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        messagesContainer.insertAdjacentHTML('beforeend', waitingHTML);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    hideWaitingIndicator() {
+        const indicator = this.querySelector('#waitingIndicator');
+        if (indicator) {
+            indicator.remove();
+        }
     }
 
     render() {
@@ -284,6 +395,111 @@ class ChatComponent extends HTMLElement {
         }
     }
 
+    addCollaborationMessage(collabMsg) {
+        const messagesContainer = this.querySelector('#chatMessages');
+
+        // Remove welcome message if it exists
+        const welcomeMsg = messagesContainer.querySelector('.welcome-message');
+        if (welcomeMsg) {
+            welcomeMsg.remove();
+        }
+
+        const timestamp = new Date(collabMsg.timestamp).toLocaleTimeString();
+        let messageHTML = '';
+
+        switch (collabMsg.type) {
+            case 'tool_call':
+                messageHTML = `
+                    <div class="message message-collaboration message-tool-call">
+                        <div class="message-avatar">🔧</div>
+                        <div class="message-bubble">
+                            <div class="message-header">
+                                <span class="message-role">[${collabMsg.fromAgent}] Tool Call</span>
+                                <span class="message-time">${timestamp}</span>
+                            </div>
+                            <div class="message-content">
+                                Calling tool: <strong>${collabMsg.toolName}</strong>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                break;
+
+            case 'tool_result':
+                const statusIcon = collabMsg.success ? '✓' : '✗';
+                const statusClass = collabMsg.success ? 'success' : 'error';
+                messageHTML = `
+                    <div class="message message-collaboration message-tool-result ${statusClass}">
+                        <div class="message-avatar">${statusIcon}</div>
+                        <div class="message-bubble">
+                            <div class="message-header">
+                                <span class="message-role">Result: ${collabMsg.toolName}</span>
+                                <span class="message-time">${collabMsg.responseTimeMs}ms</span>
+                            </div>
+                            <div class="message-content">
+                                ${this.truncate(collabMsg.toolResult, 200)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                break;
+
+            case 'agent_communication':
+                messageHTML = `
+                    <div class="message message-collaboration message-agent-comm">
+                        <div class="message-avatar">🔄</div>
+                        <div class="message-bubble">
+                            <div class="message-header">
+                                <span class="message-role">${collabMsg.fromAgent} → ${collabMsg.toAgent}</span>
+                                <span class="message-time">${timestamp}</span>
+                            </div>
+                            <div class="message-content">
+                                ${this.renderMarkdown(collabMsg.message)}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                break;
+
+            case 'agent_response':
+                messageHTML = `
+                    <div class="message message-collaboration message-agent-response">
+                        <div class="message-avatar">📥</div>
+                        <div class="message-bubble">
+                            <div class="message-header">
+                                <span class="message-role">${collabMsg.fromAgent} → ${collabMsg.toAgent}</span>
+                                <span class="message-time">${collabMsg.responseTimeMs}ms</span>
+                            </div>
+                            <div class="message-content">
+                                ${this.renderMarkdown(this.truncate(collabMsg.response, 200))}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                break;
+        }
+
+        if (messageHTML) {
+            messagesContainer.insertAdjacentHTML('beforeend', messageHTML);
+
+            // Force reflow
+            void messagesContainer.offsetHeight;
+
+            // Highlight code blocks if any
+            const newMessage = messagesContainer.lastElementChild;
+            this.highlightCode(newMessage);
+
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+    }
+
+    truncate(text, maxLength) {
+        if (!text) return '';
+        if (text.length <= maxLength) return text;
+        return text.substring(0, maxLength) + '...';
+    }
+
     getAgentColorClass(agentName) {
         if (!agentName || agentName === 'Assistant') {
             return '';
@@ -433,6 +649,10 @@ class ChatComponent extends HTMLElement {
             return;
         }
 
+        // Save collaboration messages and waiting indicators before clearing
+        const collaborationMessages = Array.from(messagesContainer.querySelectorAll('.message-collaboration, .message-waiting'));
+        const savedCollabHTML = collaborationMessages.map(el => el.outerHTML);
+
         const messagesHTML = this.messages.map(msg => {
             const timestamp = new Date(msg.timestamp).toLocaleTimeString();
             const isUser = msg.role === 'user';
@@ -473,6 +693,14 @@ class ChatComponent extends HTMLElement {
         }).join('');
 
         messagesContainer.innerHTML = messagesHTML;
+
+        // Restore collaboration messages and waiting indicators
+        if (savedCollabHTML.length > 0) {
+            savedCollabHTML.forEach(html => {
+                messagesContainer.insertAdjacentHTML('beforeend', html);
+            });
+        }
+
         void messagesContainer.offsetHeight;
 
         // Use requestAnimationFrame to ensure DOM is ready

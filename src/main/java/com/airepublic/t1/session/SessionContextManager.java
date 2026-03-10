@@ -3,16 +3,18 @@ package com.airepublic.t1.session;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import com.airepublic.t1.config.AgentConfigService;
 import com.airepublic.t1.config.WorkspaceInitializer;
+import com.airepublic.t1.service.MemoryManager;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Manages session context including CHARACTER.md and USAGE.md
+ * Manages session context including CHARACTER.md, USAGE.md, and MEMORY.md
  * These files are automatically included as context for every session
  */
 @Slf4j
@@ -21,6 +23,9 @@ import lombok.extern.slf4j.Slf4j;
 public class SessionContextManager {
     private final WorkspaceInitializer workspaceInitializer;
     private final AgentConfigService agentConfigService;
+
+    @Autowired(required = false)
+    private MemoryManager memoryManager;
 
     /**
      * Build initial context for a new session
@@ -92,7 +97,7 @@ public class SessionContextManager {
 
     /**
      * Build initial context for an agent-specific session
-     * Loads CHARACTER.md and USAGE.md from the agent's folder
+     * Loads CHARACTER.md, USAGE.md, and MEMORY.md from the agent's folder
      */
     public String buildInitialContext(String agentName) {
         final StringBuilder context = new StringBuilder();
@@ -126,6 +131,36 @@ public class SessionContextManager {
         } catch (Exception e) {
             log.error("Error loading CHARACTER.md for agent '{}'", agentName, e);
             context.append("Error loading character profile.\n");
+        }
+
+        // Load agent-specific MEMORY.md if available
+        if (memoryManager != null) {
+            try {
+                String memoryContent = memoryManager.loadMemory(agentName);
+                if (memoryContent != null && !memoryContent.isEmpty()) {
+                    // Approximate token count (1 token ≈ 4 characters)
+                    int approxTokens = memoryContent.length() / 4;
+
+                    // Safety check: don't load if memory is extremely large
+                    if (approxTokens > 10000) {
+                        log.warn("⚠️ MEMORY.md for agent '{}' is very large (~{} tokens), skipping load to prevent context overflow",
+                            agentName, approxTokens);
+                        context.append("# Previous Conversation History\n\n");
+                        context.append("*Memory file is too large to load. Recent conversations may need to be compacted.*\n\n");
+                    } else {
+                        context.append("# Previous Conversation History\n\n");
+                        context.append(memoryContent);
+                        context.append("\n");
+                        long memorySize = memoryManager.getMemorySize(agentName);
+                        log.info("📋 Loaded MEMORY.md for agent '{}' (~{} tokens, {} KB on disk)",
+                            agentName, approxTokens, memorySize / 1024);
+                    }
+                } else {
+                    log.debug("No memory found for agent '{}'", agentName);
+                }
+            } catch (Exception e) {
+                log.error("Error loading MEMORY.md for agent '{}'", agentName, e);
+            }
         }
 
         return context.toString();

@@ -7,8 +7,10 @@ import com.airepublic.t1.api.dto.ChatRequest;
 import com.airepublic.t1.api.dto.ChatResponse;
 import com.airepublic.t1.config.AgentConfigurationManager;
 import com.airepublic.t1.model.ConversationMessage;
+import com.airepublic.t1.service.MemoryManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -29,6 +31,9 @@ public class ChatController {
     private final AgentManager agentManager;
     private final AgentConfigurationManager configManager;
     private final ExecutorService executorService = Executors.newCachedThreadPool();
+
+    @Autowired(required = false)
+    private MemoryManager memoryManager;
 
     @PostMapping
     public ResponseEntity<ApiResponse<ChatResponse>> sendMessage(@RequestBody ChatRequest request) {
@@ -178,6 +183,60 @@ public class ChatController {
             log.error("Error reloading context", e);
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("Error reloading context: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/memory/compact")
+    public ResponseEntity<ApiResponse<Void>> compactMemory(@RequestParam(required = false) String agentName) {
+        try {
+            if (memoryManager == null) {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("Memory manager not available"));
+            }
+
+            String targetAgent = agentName != null ? agentName : agentManager.getCurrentAgentName();
+            memoryManager.forceCompaction(targetAgent);
+            return ResponseEntity.ok(ApiResponse.success("Memory compacted for agent: " + targetAgent, null));
+        } catch (Exception e) {
+            log.error("Error compacting memory", e);
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("Error compacting memory: " + e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/memory")
+    public ResponseEntity<ApiResponse<Void>> clearMemory(@RequestParam(required = false) String agentName) {
+        try {
+            if (memoryManager == null) {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("Memory manager not available"));
+            }
+
+            String targetAgent = agentName != null ? agentName : agentManager.getCurrentAgentName();
+            memoryManager.clearMemory(targetAgent);
+            return ResponseEntity.ok(ApiResponse.success("Memory cleared for agent: " + targetAgent, null));
+        } catch (Exception e) {
+            log.error("Error clearing memory", e);
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("Error clearing memory: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/memory/size")
+    public ResponseEntity<ApiResponse<Long>> getMemorySize(@RequestParam(required = false) String agentName) {
+        try {
+            if (memoryManager == null) {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("Memory manager not available"));
+            }
+
+            String targetAgent = agentName != null ? agentName : agentManager.getCurrentAgentName();
+            long size = memoryManager.getMemorySize(targetAgent);
+            return ResponseEntity.ok(ApiResponse.success(size));
+        } catch (Exception e) {
+            log.error("Error getting memory size", e);
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("Error getting memory size: " + e.getMessage()));
         }
     }
 }

@@ -13,7 +13,10 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -29,9 +32,17 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     // Track sessions and their associated agents
     private final Map<String, String> sessionAgents = new ConcurrentHashMap<>();
 
+    // Track all active WebSocket sessions
+    private final List<WebSocketSession> activeSessions = new ArrayList<>();
+
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         log.info("WebSocket connection established: {}", session.getId());
+
+        // Add to active sessions
+        synchronized (activeSessions) {
+            activeSessions.add(session);
+        }
 
         // Send welcome message
         Map<String, Object> welcome = Map.of(
@@ -193,11 +204,51 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         log.info("WebSocket connection closed: {} with status: {}", session.getId(), status);
         sessionAgents.remove(session.getId());
+
+        // Remove from active sessions
+        synchronized (activeSessions) {
+            activeSessions.remove(session);
+        }
     }
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
         log.error("WebSocket transport error for session: {}", session.getId(), exception);
         sessionAgents.remove(session.getId());
+
+        // Remove from active sessions
+        synchronized (activeSessions) {
+            activeSessions.remove(session);
+        }
+    }
+
+    /**
+     * Broadcast a collaboration message to all active WebSocket clients.
+     * Called by MessageBroadcaster service.
+     */
+    public void broadcastCollaborationMessage(String jsonMessage) {
+        List<WebSocketSession> sessionsToRemove = new ArrayList<>();
+
+        synchronized (activeSessions) {
+            for (WebSocketSession session : activeSessions) {
+                try {
+                    if (session.isOpen()) {
+                        session.sendMessage(new TextMessage(jsonMessage));
+                    } else {
+                        sessionsToRemove.add(session);
+                    }
+                } catch (IOException e) {
+                    log.error("Error broadcasting to session {}: {}", session.getId(), e.getMessage());
+                    sessionsToRemove.add(session);
+                }
+            }
+
+            // Clean up closed sessions
+            activeSessions.removeAll(sessionsToRemove);
+        }
+
+        if (!sessionsToRemove.isEmpty()) {
+            log.debug("Removed {} closed sessions during broadcast", sessionsToRemove.size());
+        }
     }
 }

@@ -4,6 +4,7 @@ import com.airepublic.t1.agent.Agent;
 import com.airepublic.t1.agent.AgentManager;
 import com.airepublic.t1.agent.AgentOrchestrator;
 import com.airepublic.t1.model.IndividualAgentConfig;
+import com.airepublic.t1.service.MessageBroadcaster;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -22,6 +23,7 @@ public class SendMessageToAgentTool implements AgentTool {
 
     private final AgentManager agentManager;
     private final AgentOrchestrator orchestrator;
+    private final MessageBroadcaster messageBroadcaster;
 
     @Override
     public String getName() {
@@ -113,6 +115,9 @@ public class SendMessageToAgentTool implements AgentTool {
 
             log.info("Agent '{}' sending message to agent '{}'", currentAgentName, agentName);
 
+            // Broadcast agent communication event
+            messageBroadcaster.broadcastAgentCommunication(currentAgentName, agentName, message);
+
             // Switch to target agent if needed
             if (needToSwitch) {
                 agentManager.switchToAgent(agentName);
@@ -134,6 +139,9 @@ public class SendMessageToAgentTool implements AgentTool {
 
             log.info("Agent '{}' received response from agent '{}' in {}ms",
                     currentAgentName, agentName, (endTime - startTime));
+
+            // Broadcast agent response event
+            messageBroadcaster.broadcastAgentResponse(agentName, currentAgentName, response, (endTime - startTime));
 
             // Return formatted response
             return String.format(

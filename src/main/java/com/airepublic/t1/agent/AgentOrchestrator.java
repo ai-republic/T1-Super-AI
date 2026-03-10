@@ -26,6 +26,8 @@ import com.airepublic.t1.model.ConversationMessage;
 import com.airepublic.t1.session.SessionContextManager;
 import com.airepublic.t1.tools.AgentTool;
 import com.airepublic.t1.tools.AutoModelSelectorTool;
+import com.airepublic.t1.service.MessageBroadcaster;
+import com.airepublic.t1.service.MemoryManager;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -40,12 +42,16 @@ public class AgentOrchestrator {
     private final CLIFormatter formatter;
     private final SessionContextManager sessionContextManager;
     private final AutoModelSelectorTool autoModelSelectorTool;
+    private final MessageBroadcaster messageBroadcaster;
 
     @Autowired(required = false)
     private VectorMemoryService memoryService;
 
     @Autowired(required = false)
     private AgentManager agentManager;
+
+    @Autowired(required = false)
+    private MemoryManager memoryManager;
 
     private boolean autoModelSelectionEnabled = true; // Default enabled
 
@@ -99,6 +105,16 @@ public class AgentOrchestrator {
                         config.getDefaultProvider().toString(),
                         config.getLlmConfigs().get(config.getDefaultProvider()).getModel()
                         );
+            }
+
+            // Save conversation to agent memory (MEMORY.md)
+            if (memoryManager != null && currentAgent != null) {
+                try {
+                    memoryManager.appendConversation(currentAgent, userMessage, finalResponse);
+                    log.debug("💾 Saved conversation to memory for agent '{}'", currentAgent);
+                } catch (Exception e) {
+                    log.error("Failed to save conversation to memory for agent '{}'", currentAgent, e);
+                }
             }
 
             return finalResponse;
@@ -250,8 +266,18 @@ public class AgentOrchestrator {
                             }
                         }
 
+                        // Broadcast tool call to UI
+                        final String currentAgent = agentManager != null ? agentManager.getCurrentAgentName() : "default";
+                        messageBroadcaster.broadcastToolCall(currentAgent, toolName, argsMap);
+
+                        final long startTime = System.currentTimeMillis();
                         final String result = tool.execute(argsMap);
+                        final long executionTime = System.currentTimeMillis() - startTime;
+
                         formatter.printToolCall(toolName, result);
+
+                        // Broadcast tool result to UI
+                        messageBroadcaster.broadcastToolResult(currentAgent, toolName, result, true, executionTime);
 
                         // Store tool action in vector memory if available
                         if (memoryService != null) {
@@ -269,6 +295,10 @@ public class AgentOrchestrator {
                         log.error("Error executing tool: {}", toolName, e);
                         final String errorMsg = "Error executing tool: " + e.getMessage();
                         formatter.printError(errorMsg);
+
+                        // Broadcast tool failure to UI
+                        final String currentAgent = agentManager != null ? agentManager.getCurrentAgentName() : "default";
+                        messageBroadcaster.broadcastToolResult(currentAgent, toolName, errorMsg, false, 0);
 
                         final ToolResponseMessage.ToolResponse toolResponse =
                                 new ToolResponseMessage.ToolResponse(toolCall.id(), toolName, errorMsg);
