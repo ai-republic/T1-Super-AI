@@ -36,6 +36,10 @@ import org.springframework.context.annotation.Bean;
         org.springframework.ai.model.ollama.autoconfigure.OllamaChatAutoConfiguration.class,
         org.springframework.ai.model.ollama.autoconfigure.OllamaApiAutoConfiguration.class,
         org.springframework.ai.model.ollama.autoconfigure.OllamaEmbeddingAutoConfiguration.class
+        ,
+
+        // Disable VectorStore auto-configuration (manually configured in VectorStoreConfiguration)
+        com.airepublic.vectorstore.spring.VectorStoreAutoConfiguration.class
 })
 public class T1SuperAiApplication {
 

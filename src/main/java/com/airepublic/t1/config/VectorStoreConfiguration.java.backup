@@ -9,7 +9,6 @@ import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Conditional;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.client.RestClient;
 
@@ -23,7 +22,6 @@ import org.springframework.web.client.RestClient;
  * Vector data is stored in agent-specific folders.
  * <p>
  * Enable by setting: spring.ai.vectorstore.enabled=true
- * Requires: agent configuration with defaultProvider set
  */
 @Slf4j
 @Configuration
@@ -33,10 +31,8 @@ public class VectorStoreConfiguration {
     /**
      * Create the EmbeddingModel bean based on agent configuration.
      * Uses the default provider from agent configuration.
-     * Only created if configuration is set up (defaultProvider is not null).
      */
     @Bean
-    @Conditional(DefaultProviderConfiguredCondition.class)
     public EmbeddingModel embeddingModel(AgentConfigurationManager configManager) {
         var config = configManager.getConfiguration();
         var defaultProvider = config.getDefaultProvider();
