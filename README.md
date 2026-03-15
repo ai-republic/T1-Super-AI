@@ -8,7 +8,7 @@
   [![Java](https://img.shields.io/badge/Java-25-orange?style=flat&logo=openjdk)](https://openjdk.org/)
   [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.0.3-brightgreen?style=flat&logo=springboot)](https://spring.io/projects/spring-boot)
   [![Spring AI](https://img.shields.io/badge/Spring%20AI-2.0.0--M2-blue?style=flat)](https://spring.io/projects/spring-ai)
-  [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat)](LICENSE)
+  [![License]([https://img.shields.io/badge/License-MIT-yellow](https://img.shields.io/badge/License-Creative%20Commons%20Attribution--ShareAlike%204.0%20International%20Public%20License-yellow)?style=flat)](LICENSE)
 </div>
 
 ---
