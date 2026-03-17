@@ -15,8 +15,14 @@ import org.springframework.ai.chat.messages.ToolResponseMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.ai.content.Media;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Component;
+import org.springframework.util.MimeType;
+import org.springframework.util.MimeTypeUtils;
+
+import java.util.Base64;
 
 import com.airepublic.t1.cli.CLIFormatter;
 import com.airepublic.t1.model.AgentConfiguration.TaskType;
@@ -24,6 +30,7 @@ import com.airepublic.t1.config.AgentConfigurationManager;
 import com.airepublic.t1.memory.VectorMemoryService;
 import com.airepublic.t1.model.AgentConfiguration;
 import com.airepublic.t1.model.ConversationMessage;
+import com.airepublic.t1.model.MessageAttachment;
 import com.airepublic.t1.session.SessionContextManager;
 import com.airepublic.t1.tools.AgentTool;
 import com.airepublic.t1.tools.AutoModelSelectorTool;
@@ -63,11 +70,16 @@ public class AgentOrchestrator {
     private String currentModelInfo = null; // Store current model being used
 
     public String processMessage(final String userMessage) {
-        // Add user message to history
+        return processMessage(userMessage, new ArrayList<>());
+    }
+
+    public String processMessage(final String userMessage, final List<MessageAttachment> attachments) {
+        // Add user message to history with attachments
         final ConversationMessage userMsg = ConversationMessage.builder()
                 .role("user")
                 .content(userMessage)
                 .timestamp(LocalDateTime.now())
+                .attachments(attachments != null ? attachments : new ArrayList<>())
                 .build();
         conversationHistory.add(userMsg);
 
@@ -361,7 +373,28 @@ public class AgentOrchestrator {
         // Convert conversation history
         for (final ConversationMessage msg : conversationHistory) {
             if ("user".equals(msg.getRole())) {
-                messages.add(new UserMessage(msg.getContent()));
+                // Check if message has attachments
+                if (msg.getAttachments() != null && !msg.getAttachments().isEmpty()) {
+                    // Create UserMessage with media content using builder
+                    var userMessageBuilder = UserMessage.builder()
+                            .text(msg.getContent());
+
+                    for (MessageAttachment attachment : msg.getAttachments()) {
+                        try {
+                            MimeType mimeType = parseMimeType(attachment.getMimeType());
+                            // Decode base64 content and wrap in ByteArrayResource
+                            byte[] content = Base64.getDecoder().decode(attachment.getContentBase64());
+                            ByteArrayResource resource = new ByteArrayResource(content);
+                            userMessageBuilder.media(new Media(mimeType, resource));
+                            log.debug("Added media attachment: {} ({})", attachment.getFilename(), attachment.getMimeType());
+                        } catch (Exception e) {
+                            log.warn("Failed to process attachment: {}", attachment.getFilename(), e);
+                        }
+                    }
+                    messages.add(userMessageBuilder.build());
+                } else {
+                    messages.add(new UserMessage(msg.getContent()));
+                }
             } else if ("assistant".equals(msg.getRole())) {
                 messages.add(new AssistantMessage(msg.getContent()));
             }
@@ -370,6 +403,35 @@ public class AgentOrchestrator {
         return messages;
     }
 
+
+    /**
+     * Parse MIME type string to Spring MimeType object
+     */
+    private MimeType parseMimeType(String mimeTypeStr) {
+        if (mimeTypeStr == null) {
+            return MimeTypeUtils.APPLICATION_OCTET_STREAM;
+        }
+
+        // Common image types
+        switch (mimeTypeStr.toLowerCase()) {
+            case "image/png":
+                return MimeTypeUtils.IMAGE_PNG;
+            case "image/jpeg":
+            case "image/jpg":
+                return MimeTypeUtils.IMAGE_JPEG;
+            case "image/gif":
+                return MimeTypeUtils.IMAGE_GIF;
+            case "text/plain":
+                return MimeTypeUtils.TEXT_PLAIN;
+            default:
+                try {
+                    return MimeTypeUtils.parseMimeType(mimeTypeStr);
+                } catch (Exception e) {
+                    log.warn("Failed to parse MIME type: {}, using default", mimeTypeStr);
+                    return MimeTypeUtils.APPLICATION_OCTET_STREAM;
+                }
+        }
+    }
 
     public void clearHistory() {
         conversationHistory.clear();

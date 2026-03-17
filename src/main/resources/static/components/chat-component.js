@@ -5,6 +5,7 @@ class ChatComponent extends HTMLElement {
         this.currentAgent = null;
         this.activeStreams = new Set(); // Track multiple concurrent streams
         this.ws = null;
+        this.attachedFiles = []; // Track attached files
     }
 
     connectedCallback() {
@@ -135,7 +136,19 @@ class ChatComponent extends HTMLElement {
                     </div>
                 </div>
                 <div class="chat-input-container">
+                    <div id="filePreviewContainer" class="file-preview-container" style="display: none;"></div>
                     <form class="chat-input-form" id="chatForm">
+                        <input
+                            type="file"
+                            id="fileInput"
+                            class="file-input"
+                            multiple
+                            accept="image/*,.pdf,.txt"
+                            style="display: none;"
+                        />
+                        <button type="button" class="btn btn-secondary btn-attach" id="attachBtn" title="Attach files (images, PDF, text)">
+                            <span class="icon">📎</span>
+                        </button>
                         <textarea
                             id="messageInput"
                             class="chat-input"
@@ -166,6 +179,17 @@ class ChatComponent extends HTMLElement {
         const form = this.querySelector('#chatForm');
         const input = this.querySelector('#messageInput');
         const sendBtn = this.querySelector('#sendBtn');
+        const attachBtn = this.querySelector('#attachBtn');
+        const fileInput = this.querySelector('#fileInput');
+
+        // File attachment handling
+        attachBtn.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            this.handleFileSelection(e.target.files);
+        });
 
         // Auto-resize textarea
         input.addEventListener('input', () => {
@@ -191,13 +215,18 @@ class ChatComponent extends HTMLElement {
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const message = input.value.trim();
-            if (message) {
+            if (message || this.attachedFiles.length > 0) {
                 // Clear input immediately so user can type next message
                 input.value = '';
                 input.style.height = 'auto';
 
-                // Send message without blocking (parallel processing)
-                this.sendMessage(message);
+                // Send message with attachments without blocking (parallel processing)
+                this.sendMessage(message, this.attachedFiles);
+
+                // Clear attached files
+                this.attachedFiles = [];
+                fileInput.value = '';
+                this.updateFilePreview();
             }
         });
 
@@ -206,6 +235,71 @@ class ChatComponent extends HTMLElement {
             this.currentAgent = e.detail;
             this.loadHistory();
         });
+    }
+
+    handleFileSelection(files) {
+        if (!files || files.length === 0) return;
+
+        // Convert FileList to Array and add to attachedFiles
+        Array.from(files).forEach(file => {
+            // Check file size (max 10MB)
+            if (file.size > 10 * 1024 * 1024) {
+                this.showError(`File ${file.name} is too large (max 10MB)`);
+                return;
+            }
+
+            // Check file type
+            const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'application/pdf', 'text/plain'];
+            if (!validTypes.includes(file.type)) {
+                this.showError(`File type ${file.type} is not supported`);
+                return;
+            }
+
+            this.attachedFiles.push(file);
+        });
+
+        this.updateFilePreview();
+    }
+
+    updateFilePreview() {
+        const container = this.querySelector('#filePreviewContainer');
+        if (this.attachedFiles.length === 0) {
+            container.style.display = 'none';
+            container.innerHTML = '';
+            return;
+        }
+
+        container.style.display = 'flex';
+        container.innerHTML = this.attachedFiles.map((file, index) => `
+            <div class="file-preview-item">
+                <div class="file-preview-icon">${this.getFileIcon(file.type)}</div>
+                <div class="file-preview-name">${file.name}</div>
+                <button type="button" class="file-preview-remove" onclick="chatComponent.removeFile(${index})" title="Remove file">
+                    ×
+                </button>
+            </div>
+        `).join('');
+    }
+
+    getFileIcon(mimeType) {
+        if (mimeType.startsWith('image/')) return '🖼️';
+        if (mimeType === 'application/pdf') return '📄';
+        if (mimeType === 'text/plain') return '📝';
+        return '📎';
+    }
+
+    removeFile(index) {
+        this.attachedFiles.splice(index, 1);
+        this.updateFilePreview();
+    }
+
+    showError(message) {
+        // Create a temporary error toast
+        const toast = document.createElement('div');
+        toast.className = 'error-toast';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
     }
 
     async loadHistory() {
@@ -239,7 +333,7 @@ class ChatComponent extends HTMLElement {
         }
     }
 
-    async sendMessage(content) {
+    async sendMessage(content, files = []) {
         const input = this.querySelector('#messageInput');
         const sendBtn = this.querySelector('#sendBtn');
 
@@ -250,12 +344,22 @@ class ChatComponent extends HTMLElement {
         // Update UI to show activity
         this.updateInputState();
 
-        // Add user message to UI
-        this.addMessage({
+        // Add user message to UI with file attachments
+        const userMessage = {
             role: 'user',
             content: content,
             timestamp: new Date().toISOString()
-        });
+        };
+
+        if (files.length > 0) {
+            userMessage.attachments = files.map(f => ({
+                filename: f.name,
+                mimeType: f.type,
+                fileSize: f.size
+            }));
+        }
+
+        this.addMessage(userMessage);
 
         // Create assistant message placeholder
         const assistantMessageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
@@ -269,11 +373,46 @@ class ChatComponent extends HTMLElement {
         });
 
         try {
-            // Build URL with message and agentName parameters
+            let response;
+
+            // If files are attached, use multipart form data endpoint
+            if (files.length > 0) {
+                const formData = new FormData();
+                formData.append('message', content);
+                if (this.currentAgent) {
+                    formData.append('agentName', this.currentAgent);
+                }
+                files.forEach(file => {
+                    formData.append('files', file);
+                });
+
+                // For file uploads, use non-streaming endpoint
+                response = await fetch('/api/v1/chat/with-files', {
+                    method: 'POST',
+                    headers: getAuthHeaders(),
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+
+                // Update assistant message with full response (no streaming for file uploads)
+                this.updateMessageContent(assistantMessageId, result.data.response, false);
+
+                // Remove stream tracking
+                this.activeStreams.delete(streamId);
+                this.updateInputState();
+                return;
+            }
+
+            // Build URL with message and agentName parameters for text-only messages
             const streamUrl = `/api/v1/chat/stream?message=${encodeURIComponent(content)}${this.currentAgent ? `&agentName=${encodeURIComponent(this.currentAgent)}` : ''}`;
 
             // Use fetch with ReadableStream for SSE with authentication headers
-            const response = await fetch(
+            response = await fetch(
                 streamUrl,
                 {
                     method: 'GET',
@@ -566,6 +705,22 @@ class ChatComponent extends HTMLElement {
         const agentName = isUser ? 'You' : (msg.agentName || 'Assistant');
         const colorClass = isUser ? '' : this.getAgentColorClass(msg.agentName || 'Assistant');
 
+        // Build attachments HTML if present
+        let attachmentsHTML = '';
+        if (msg.attachments && msg.attachments.length > 0) {
+            attachmentsHTML = `
+                <div class="message-attachments">
+                    ${msg.attachments.map(att => `
+                        <div class="attachment-item">
+                            <span class="attachment-icon">${this.getFileIcon(att.mimeType)}</span>
+                            <span class="attachment-name">${att.filename}</span>
+                            <span class="attachment-size">${this.formatFileSize(att.fileSize)}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
         const messageHTML = `
             <div class="message ${isUser ? 'message-user' : 'message-assistant'} ${colorClass}" data-message-id="${messageId}" data-agent="${isUser ? '' : agentName}">
                 <div class="message-avatar">
@@ -576,6 +731,7 @@ class ChatComponent extends HTMLElement {
                         <span class="message-role">${isUser ? 'You' : agentName}</span>
                         <span class="message-time">${timestamp}</span>
                     </div>
+                    ${attachmentsHTML}
                     <div class="message-content">
                         ${this.renderMarkdown(msg.content)}
                     </div>
@@ -664,6 +820,21 @@ class ChatComponent extends HTMLElement {
                 });
             }
         }
+    }
+
+    updateMessageContent(messageId, content, streaming = false) {
+        const message = this.messages.find(m => m.id === messageId);
+        if (message) {
+            message.content = content;
+            message.streaming = streaming;
+            this.updateMessage(messageId);
+        }
+    }
+
+    formatFileSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
 
     renderMessages() {

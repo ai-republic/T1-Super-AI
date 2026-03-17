@@ -7,6 +7,8 @@ import com.airepublic.t1.api.dto.ChatRequest;
 import com.airepublic.t1.api.dto.ChatResponse;
 import com.airepublic.t1.config.AgentConfigurationManager;
 import com.airepublic.t1.model.ConversationMessage;
+import com.airepublic.t1.model.MessageAttachment;
+import com.airepublic.t1.service.FileAttachmentService;
 import com.airepublic.t1.service.MemoryManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,9 +16,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -30,6 +34,7 @@ public class ChatController {
     private final AgentOrchestrator orchestrator;
     private final AgentManager agentManager;
     private final AgentConfigurationManager configManager;
+    private final FileAttachmentService fileAttachmentService;
     private final ExecutorService executorService = Executors.newCachedThreadPool();
 
     @Autowired(required = false)
@@ -49,8 +54,8 @@ public class ChatController {
                 }
             }
 
-            // Process message
-            String response = orchestrator.processMessage(request.getMessage());
+            // Process message with attachments
+            String response = orchestrator.processMessage(request.getMessage(), request.getAttachments());
             long responseTime = System.currentTimeMillis() - startTime;
 
             // Build response
@@ -66,6 +71,67 @@ public class ChatController {
 
         } catch (Exception e) {
             log.error("Error processing chat message", e);
+            return ResponseEntity.internalServerError()
+                    .body(ApiResponse.error("Error processing message: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Send a message with file attachments (multipart form data)
+     */
+    @PostMapping(value = "/with-files", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<ChatResponse>> sendMessageWithFiles(
+            @RequestParam String message,
+            @RequestParam(required = false) MultipartFile[] files,
+            @RequestParam(required = false) String agentName) {
+
+        log.info("Received chat request with {} file(s): {}",
+                 files != null ? files.length : 0,
+                 message.substring(0, Math.min(50, message.length())));
+
+        try {
+            long startTime = System.currentTimeMillis();
+
+            // Switch agent if specified
+            if (agentName != null && !agentName.isEmpty()) {
+                if (!agentManager.getCurrentAgentName().equals(agentName)) {
+                    agentManager.switchToAgent(agentName);
+                }
+            }
+
+            // Process uploaded files
+            List<MessageAttachment> attachments = new ArrayList<>();
+            if (files != null && files.length > 0) {
+                for (MultipartFile file : files) {
+                    try {
+                        MessageAttachment attachment = fileAttachmentService.processFile(file);
+                        attachments.add(attachment);
+                        log.debug("Processed file: {} ({} bytes)", attachment.getFilename(), attachment.getFileSize());
+                    } catch (Exception e) {
+                        log.error("Error processing file: {}", file.getOriginalFilename(), e);
+                        return ResponseEntity.badRequest()
+                                .body(ApiResponse.error("Error processing file " + file.getOriginalFilename() + ": " + e.getMessage()));
+                    }
+                }
+            }
+
+            // Process message with attachments
+            String response = orchestrator.processMessage(message, attachments);
+            long responseTime = System.currentTimeMillis() - startTime;
+
+            // Build response
+            ChatResponse chatResponse = ChatResponse.builder()
+                    .response(response)
+                    .agentName(agentManager.getCurrentAgentName())
+                    .modelUsed(configManager.getCurrentModel())
+                    .timestamp(LocalDateTime.now())
+                    .responseTimeMs(responseTime)
+                    .build();
+
+            return ResponseEntity.ok(ApiResponse.success(chatResponse));
+
+        } catch (Exception e) {
+            log.error("Error processing chat message with files", e);
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("Error processing message: " + e.getMessage()));
         }

@@ -24,6 +24,10 @@ public class ConversationMessage {
     private List<ToolCall> toolCalls = new ArrayList<>();
     private String toolCallId; // for tool response messages
 
+    // File attachments (e.g., images for vision analysis)
+    @Builder.Default
+    private List<MessageAttachment> attachments = new ArrayList<>();
+
     // Collaboration message fields
     private String messageType; // "tool_call", "tool_result", "agent_communication", "agent_response"
     private String fromAgent; // For collaboration messages
