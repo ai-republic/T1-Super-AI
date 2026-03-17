@@ -1019,7 +1019,9 @@ public class AgentConfigService {
         }
 
         // Also check for legacy format (JSON files in root)
-        final File[] files = agentsDir.listFiles((dir, name) -> name.endsWith(".json"));
+        // Exclude vectorstore config files like schemas.json
+        final File[] files = agentsDir.listFiles((dir, name) ->
+            name.endsWith(".json") && !name.equals("schemas.json"));
         if (files != null && files.length > 0) {
             log.info("Found {} legacy config files", files.length);
             for (final File file : files) {
