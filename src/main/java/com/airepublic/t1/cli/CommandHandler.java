@@ -78,10 +78,11 @@ public class CommandHandler {
 
         switch (command) {
             case "help" -> showHelp();
-            case "config" -> handleConfig();
+            case "config" -> handleConfig(args);
             case "provider" -> handleProvider(args);
             case "model" -> handleModel(args);
             case "auto-model" -> handleAutoModel(args);
+            case "task-model" -> handleTaskModel(args);
             case "classify" -> handleClassify(args);
             case "mcp" -> handleMCP(args);
             case "plugin" -> handlePlugin(args);
@@ -100,10 +101,15 @@ public class CommandHandler {
                 Available Commands:
 
                 /help                    Show this help message
-                /config                  Run configuration wizard
+                /config                  Run full configuration wizard
+                /config task-models      Configure task-specific models only
                 /provider [name]         Switch LLM provider (openai, anthropic, ollama)
                 /model [name]            Change or view current model (e.g., gpt-4o, claude-3-opus)
                 /auto-model [on|off]     Enable/disable automatic model selection based on prompt
+                /task-model list         List all task-specific model configurations
+                /task-model config       Configure task-specific models interactively
+                /task-model set <type> <provider> <model>  Set a task-specific model
+                /task-model remove <type>                  Remove a task-specific model
                 /classify <prompt>       Test LLM classification on a prompt (debugging)
                 /mcp list                List connected MCP servers
                 /mcp tools [name]        List tools from MCP server (or 'local' for plugin tools)
@@ -126,10 +132,19 @@ public class CommandHandler {
         formatter.printInfo(help);
     }
 
-    private void handleConfig() {
-        formatter.printInfo("Starting configuration wizard...");
-        configManager.runConfigurationWizard();
-        formatter.printSuccess("Configuration updated!");
+    private void handleConfig(final String args) {
+        if (args.trim().isEmpty()) {
+            formatter.printInfo("Starting full configuration wizard...");
+            configManager.runConfigurationWizard();
+            formatter.printSuccess("Configuration updated!");
+        } else if (args.trim().equalsIgnoreCase("task-models")) {
+            formatter.printInfo("Starting task-specific model configuration wizard...");
+            configManager.runTaskModelConfigurationWizard();
+            formatter.printSuccess("Task models configured!");
+        } else {
+            formatter.printError("Invalid config option: " + args);
+            formatter.printInfo("Usage: /config [task-models]");
+        }
     }
 
     private void handleProvider(final String args) {
@@ -343,6 +358,80 @@ public class CommandHandler {
             default -> {
                 formatter.printError("Invalid argument: " + args);
                 formatter.printInfo("Usage: /auto-model [on|off]");
+            }
+        }
+    }
+
+    private void handleTaskModel(final String args) {
+        final String[] parts = args.split("\\s+", 2);
+        final String subcommand = parts.length > 0 ? parts[0] : "";
+
+        switch (subcommand) {
+            case "list" -> {
+                configManager.listTaskModels();
+            }
+            case "config" -> {
+                formatter.printInfo("Starting task-specific model configuration wizard...");
+                configManager.runTaskModelConfigurationWizard();
+                formatter.printSuccess("Task models configured!");
+            }
+            case "set" -> {
+                if (parts.length < 2) {
+                    formatter.printError("Usage: /task-model set <task-type> <provider> <model>");
+                    formatter.printInfo("Example: /task-model set CODING OPENAI gpt-4o");
+                    formatter.printInfo("Available task types: GENERAL_KNOWLEDGE, CODING, SPEECH_TO_TEXT, TEXT_TO_SPEECH,");
+                    formatter.printInfo("                      IMAGE_ANALYSIS, IMAGE_GENERATION, VIDEO_ANALYSIS, VIDEO_GENERATION");
+                    return;
+                }
+
+                final String[] setArgs = parts[1].split("\\s+");
+                if (setArgs.length < 3) {
+                    formatter.printError("Usage: /task-model set <task-type> <provider> <model>");
+                    formatter.printInfo("Example: /task-model set CODING OPENAI gpt-4o");
+                    return;
+                }
+
+                try {
+                    final TaskType taskType = TaskType.valueOf(setArgs[0].toUpperCase());
+                    final LLMProvider provider = LLMProvider.valueOf(setArgs[1].toUpperCase());
+                    final String model = setArgs[2];
+
+                    configManager.updateTaskModel(taskType, provider, model);
+                    formatter.printSuccess("Task model configured: " + taskType.getDisplayName() +
+                            " -> " + provider + " / " + model);
+                } catch (final IllegalArgumentException e) {
+                    formatter.printError("Invalid task type or provider: " + e.getMessage());
+                    formatter.printInfo("Available task types: GENERAL_KNOWLEDGE, CODING, SPEECH_TO_TEXT, TEXT_TO_SPEECH,");
+                    formatter.printInfo("                      IMAGE_ANALYSIS, IMAGE_GENERATION, VIDEO_ANALYSIS, VIDEO_GENERATION");
+                    formatter.printInfo("Available providers: OPENAI, ANTHROPIC, OLLAMA");
+                } catch (final Exception e) {
+                    formatter.printError("Error configuring task model: " + e.getMessage());
+                }
+            }
+            case "remove" -> {
+                if (parts.length < 2) {
+                    formatter.printError("Usage: /task-model remove <task-type>");
+                    formatter.printInfo("Example: /task-model remove CODING");
+                    return;
+                }
+
+                try {
+                    final TaskType taskType = TaskType.valueOf(parts[1].toUpperCase());
+                    configManager.removeTaskModel(taskType);
+                    formatter.printSuccess("Task model removed: " + taskType.getDisplayName() +
+                            " (will use default provider)");
+                } catch (final IllegalArgumentException e) {
+                    formatter.printError("Invalid task type: " + parts[1]);
+                } catch (final Exception e) {
+                    formatter.printError("Error removing task model: " + e.getMessage());
+                }
+            }
+            default -> {
+                formatter.printError("Usage: /task-model [list|config|set|remove]");
+                formatter.printInfo("  /task-model list                          - List all task-specific models");
+                formatter.printInfo("  /task-model config                        - Run interactive configuration");
+                formatter.printInfo("  /task-model set <type> <provider> <model> - Set a task-specific model");
+                formatter.printInfo("  /task-model remove <type>                 - Remove a task-specific model");
             }
         }
     }

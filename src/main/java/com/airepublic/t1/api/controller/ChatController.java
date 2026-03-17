@@ -119,10 +119,12 @@ public class ChatController {
                 // Calculate response time
                 long responseTime = System.currentTimeMillis() - startTime;
 
-                // Send complete event with JSON metadata
+                // Send complete event with JSON metadata including model used
+                String modelUsed = configManager.getCurrentModel();
                 String completeData = String.format(
-                    "{\"tokensUsed\":0,\"processingTime\":%d}",
-                    responseTime
+                    "{\"tokensUsed\":0,\"processingTime\":%d,\"modelUsed\":\"%s\"}",
+                    responseTime,
+                    modelUsed != null ? modelUsed : ""
                 );
                 emitter.send(SseEmitter.event()
                         .name("complete")
@@ -132,18 +134,31 @@ public class ChatController {
                 log.debug("Stream completed in {}ms", responseTime);
 
             } catch (Exception e) {
-                log.error("Error streaming message: {}", e.getMessage());
+                log.error("Error streaming message: {}", e.getMessage(), e);
                 try {
+                    // Send error message as a chunk
                     emitter.send(SseEmitter.event()
                             .name("chunk")
-                            .data("\n\n*Error: " + e.getMessage() + "*"));
+                            .data("\n\n**Error:** " + e.getMessage()));
+
+                    // CRITICAL: Always send complete event to finalize the message
+                    long responseTime = System.currentTimeMillis() - startTime;
+                    String completeData = String.format(
+                        "{\"tokensUsed\":0,\"processingTime\":%d,\"error\":true}",
+                        responseTime
+                    );
                     emitter.send(SseEmitter.event()
                             .name("complete")
-                            .data("{}"));
+                            .data(completeData));
+
+                    // Complete normally (not with error) since we handled it gracefully
+                    emitter.complete();
+                    log.debug("Stream completed with error in {}ms", responseTime);
                 } catch (Exception sendError) {
                     log.error("Error sending error message", sendError);
+                    // Last resort - complete with error
+                    emitter.completeWithError(e);
                 }
-                emitter.completeWithError(e);
             }
         });
 

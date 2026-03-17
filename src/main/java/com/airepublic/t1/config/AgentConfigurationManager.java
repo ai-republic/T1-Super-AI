@@ -498,4 +498,199 @@ public class AgentConfigurationManager {
 
         return llmConfig.getModel();
     }
+
+    /**
+     * Configure task-specific model selection wizard
+     */
+    public void runTaskModelConfigurationWizard() {
+        final Scanner scanner = new Scanner(System.in);
+
+        System.out.println("\n╔════════════════════════════════════════════════════╗");
+        System.out.println("║  🎯 Task-Specific Model Configuration             ║");
+        System.out.println("╚════════════════════════════════════════════════════╝\n");
+
+        System.out.println("Configure different models for different task types.");
+        System.out.println("This allows automatic model selection based on your prompt.\n");
+
+        // Check if any providers are configured
+        if (configuration.getLlmConfigs().isEmpty()) {
+            System.out.println("❌ No LLM providers configured!");
+            System.out.println("   Please run /config first to configure providers.");
+            return;
+        }
+
+        // Show which providers are configured
+        System.out.println("✅ Configured providers:");
+        configuration.getLlmConfigs().keySet().forEach(provider ->
+                System.out.println("  • " + provider));
+        System.out.println();
+
+        // Ask if user wants to configure task models
+        final boolean configureTasks = readYesNo(scanner,
+                "💡 Configure task-specific models? (y/n, default: y): ", true);
+
+        if (!configureTasks) {
+            System.out.println("⏭️  Skipping task-specific model configuration.");
+            return;
+        }
+
+        // Configure each task type
+        System.out.println("\n📋 Configuring task-specific models...\n");
+
+        // Group 1: Text & Reasoning Tasks
+        System.out.println("╔════════════════════════════════════════════════════╗");
+        System.out.println("║  📝 TEXT & REASONING TASKS                         ║");
+        System.out.println("╚════════════════════════════════════════════════════╝");
+        configureTaskTypeInteractive(scanner, TaskType.GENERAL_KNOWLEDGE);
+        configureTaskTypeInteractive(scanner, TaskType.CODING);
+
+        // Group 2: Audio Tasks
+        System.out.println("\n╔════════════════════════════════════════════════════╗");
+        System.out.println("║  🎤 AUDIO TASKS                                    ║");
+        System.out.println("╚════════════════════════════════════════════════════╝");
+        System.out.println("💡 Recommended: OpenAI Whisper for STT");
+        configureTaskTypeInteractive(scanner, TaskType.SPEECH_TO_TEXT);
+        configureTaskTypeInteractive(scanner, TaskType.TEXT_TO_SPEECH);
+
+        // Group 3: Image Tasks
+        System.out.println("\n╔════════════════════════════════════════════════════╗");
+        System.out.println("║  🖼️  IMAGE TASKS                                    ║");
+        System.out.println("╚════════════════════════════════════════════════════╝");
+        System.out.println("💡 Analysis: GPT-4 Vision, Claude 3.5; Generation: DALL-E");
+        configureTaskTypeInteractive(scanner, TaskType.IMAGE_ANALYSIS);
+        configureTaskTypeInteractive(scanner, TaskType.IMAGE_GENERATION);
+
+        // Group 4: Video Tasks
+        System.out.println("\n╔════════════════════════════════════════════════════╗");
+        System.out.println("║  🎬 VIDEO TASKS                                    ║");
+        System.out.println("╚════════════════════════════════════════════════════╝");
+        configureTaskTypeInteractive(scanner, TaskType.VIDEO_ANALYSIS);
+        configureTaskTypeInteractive(scanner, TaskType.VIDEO_GENERATION);
+
+        // Save configuration
+        saveConfiguration();
+
+        System.out.println("\n╔════════════════════════════════════════════════════╗");
+        System.out.println("║  ✅ Task-Specific Models Configured!               ║");
+        System.out.println("╚════════════════════════════════════════════════════╝");
+        System.out.println("📂 Configuration saved to: " + CONFIG_FILE);
+        System.out.println("💡 Use /auto-model on to enable automatic model selection.\n");
+    }
+
+    /**
+     * Interactive configuration for a single task type
+     */
+    private void configureTaskTypeInteractive(final Scanner scanner, final TaskType taskType) {
+        System.out.println("\n📋 " + taskType.getDisplayName() + " - " + taskType.getDescription());
+
+        // Show existing configuration if any
+        final TaskModelConfig existingConfig = configuration.getTaskModels().get(taskType);
+        if (existingConfig != null) {
+            System.out.println("   Current: " + existingConfig.getProvider() + " / " + existingConfig.getModel());
+        }
+
+        // Get list of configured providers
+        final java.util.List<LLMProvider> providers = new java.util.ArrayList<>(configuration.getLlmConfigs().keySet());
+
+        // Show available providers
+        int providerIdx = 1;
+        System.out.println("Available providers:");
+        for (final LLMProvider provider : providers) {
+            System.out.println("  " + providerIdx++ + ". " + getProviderIcon(provider) + " " + provider);
+        }
+        System.out.println("  " + providerIdx + ". ⏭️  Skip (use default provider)");
+
+        final int maxProviderChoice = providerIdx;
+        final int providerChoice = readIntWithValidation(scanner,
+                "🔧 Select provider for " + taskType.getDisplayName() + " (1-" + maxProviderChoice + "): ",
+                1, maxProviderChoice);
+
+        // Skip if user chooses to use default
+        if (providerChoice == maxProviderChoice) {
+            System.out.println("⏭️  Skipping - will use default provider for " + taskType.getDisplayName());
+            // Remove existing config if any
+            configuration.getTaskModels().remove(taskType);
+            return;
+        }
+
+        // Get selected provider
+        final LLMProvider selectedProvider = providers.get(providerChoice - 1);
+        final LLMConfig llmConfig = configuration.getLlmConfigs().get(selectedProvider);
+        final String defaultModel = llmConfig != null ? llmConfig.getModel() : "";
+
+        // Provide model suggestions
+        final String modelSuggestion = getModelSuggestion(taskType, selectedProvider);
+        if (!modelSuggestion.isEmpty()) {
+            System.out.println("💡 Suggested model: " + modelSuggestion);
+        }
+
+        final String model = readStringWithDefault(scanner,
+                "🎯 Enter model name (default: " + defaultModel + "): ", defaultModel);
+
+        // Save configuration
+        final TaskModelConfig taskConfig = new TaskModelConfig(selectedProvider, model);
+        configuration.getTaskModels().put(taskType, taskConfig);
+        System.out.println("✅ " + taskType.getDisplayName() + " configured with " +
+                selectedProvider + " - " + model);
+    }
+
+    /**
+     * Update a specific task model configuration
+     */
+    public void updateTaskModel(final TaskType taskType, final LLMProvider provider, final String model) {
+        // Validate provider is configured
+        if (!configuration.getLlmConfigs().containsKey(provider)) {
+            throw new IllegalArgumentException("Provider " + provider + " is not configured. Configure it first.");
+        }
+
+        final TaskModelConfig taskConfig = new TaskModelConfig(provider, model);
+        configuration.getTaskModels().put(taskType, taskConfig);
+        saveConfiguration();
+    }
+
+    /**
+     * Remove a task-specific model configuration
+     */
+    public void removeTaskModel(final TaskType taskType) {
+        configuration.getTaskModels().remove(taskType);
+        saveConfiguration();
+    }
+
+    /**
+     * List all configured task-specific models
+     */
+    public void listTaskModels() {
+        if (configuration.getTaskModels().isEmpty()) {
+            System.out.println("No task-specific models configured.");
+            System.out.println("All tasks will use the default provider: " + configuration.getDefaultProvider());
+            return;
+        }
+
+        System.out.println("\n🎯 Task-Specific Models:");
+        System.out.println("─".repeat(60));
+
+        for (final TaskType taskType : TaskType.values()) {
+            final TaskModelConfig taskConfig = configuration.getTaskModels().get(taskType);
+            if (taskConfig != null) {
+                System.out.println(String.format("%-25s %s / %s",
+                        taskType.getDisplayName() + ":",
+                        taskConfig.getProvider(),
+                        taskConfig.getModel()));
+            }
+        }
+
+        System.out.println("─".repeat(60));
+        System.out.println("\nℹ️  Other tasks use default provider: " + configuration.getDefaultProvider());
+    }
+
+    /**
+     * Get provider icon for CLI display
+     */
+    private String getProviderIcon(final LLMProvider provider) {
+        return switch (provider) {
+            case OPENAI -> "🟢";
+            case ANTHROPIC -> "🟣";
+            case OLLAMA -> "🦙";
+        };
+    }
 }

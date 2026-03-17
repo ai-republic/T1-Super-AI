@@ -3,7 +3,7 @@ class ChatComponent extends HTMLElement {
         super();
         this.messages = [];
         this.currentAgent = null;
-        this.isStreaming = false;
+        this.activeStreams = new Set(); // Track multiple concurrent streams
         this.ws = null;
     }
 
@@ -187,14 +187,17 @@ class ChatComponent extends HTMLElement {
             }
         });
 
-        // Handle form submission
+        // Handle form submission - NOW SUPPORTS PARALLEL PROCESSING
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
             const message = input.value.trim();
-            if (message && !this.isStreaming) {
-                await this.sendMessage(message);
+            if (message) {
+                // Clear input immediately so user can type next message
                 input.value = '';
                 input.style.height = 'auto';
+
+                // Send message without blocking (parallel processing)
+                this.sendMessage(message);
             }
         });
 
@@ -207,7 +210,7 @@ class ChatComponent extends HTMLElement {
 
     async loadHistory() {
         // Don't reload history during active streaming to avoid conflicts
-        if (this.isStreaming) {
+        if (this.activeStreams.size > 0) {
             return;
         }
 
@@ -237,14 +240,17 @@ class ChatComponent extends HTMLElement {
     }
 
     async sendMessage(content) {
-        // Disable input and set streaming flag FIRST
-        this.isStreaming = true;
         const input = this.querySelector('#messageInput');
         const sendBtn = this.querySelector('#sendBtn');
-        input.disabled = true;
-        sendBtn.disabled = true;
 
-        // Add user message to UI (will use appendMessageToDOM since isStreaming=true)
+        // Generate unique stream ID for tracking
+        const streamId = 'stream-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+        this.activeStreams.add(streamId);
+
+        // Update UI to show activity
+        this.updateInputState();
+
+        // Add user message to UI
         this.addMessage({
             role: 'user',
             content: content,
@@ -252,7 +258,7 @@ class ChatComponent extends HTMLElement {
         });
 
         // Create assistant message placeholder
-        const assistantMessageId = 'msg-' + Date.now();
+        const assistantMessageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
         this.addMessage({
             id: assistantMessageId,
             role: 'assistant',
@@ -285,8 +291,6 @@ class ChatComponent extends HTMLElement {
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             let buffer = '';
-            let currentEvent = '';
-
             let messageFinalized = false;
 
             while (true) {
@@ -356,43 +360,71 @@ class ChatComponent extends HTMLElement {
                 this.finalizeMessage(assistantMessageId, {});
             }
 
-            // Re-enable input and finalize UI
-            this.isStreaming = false;
-            input.disabled = false;
-            sendBtn.disabled = false;
-            input.focus();
-
-            // Force final render to ensure clean state
-            this.renderMessages();
-            requestAnimationFrame(() => {
-                this.renderMessages();
-            });
-
         } catch (error) {
             console.error('Failed to send message:', error);
-            this.appendToMessage(assistantMessageId, '\n\n*Failed to send message: ' + error.message + '*');
-            this.finalizeMessage(assistantMessageId, {});
 
-            this.isStreaming = false;
-            input.disabled = false;
-            sendBtn.disabled = false;
+            // Show error in the message
+            const errorMessage = '\n\n**Error:** ' + error.message;
+            this.appendToMessage(assistantMessageId, errorMessage);
 
+            // CRITICAL: Always finalize the message to remove streaming indicator
+            this.finalizeMessage(assistantMessageId, { error: true });
+
+            // Force immediate UI update to show error state
+            requestAnimationFrame(() => {
+                const messageElement = this.querySelector(`[data-message-id="${assistantMessageId}"]`);
+                if (messageElement) {
+                    messageElement.classList.add('error-message');
+
+                    // Ensure streaming indicator is removed
+                    const streamingIndicator = messageElement.querySelector('.streaming-indicator');
+                    if (streamingIndicator) {
+                        streamingIndicator.remove();
+                    }
+                }
+            });
+        } finally {
+            // CRITICAL: Always remove stream from active set and update UI
+            this.activeStreams.delete(streamId);
+            this.updateInputState();
+
+            // Focus input if no other streams are active
+            if (this.activeStreams.size === 0) {
+                input.focus();
+            }
+
+            // Force final render to ensure clean state
             requestAnimationFrame(() => {
                 this.renderMessages();
             });
         }
     }
 
+    updateInputState() {
+        const sendBtn = this.querySelector('#sendBtn');
+        const input = this.querySelector('#messageInput');
+
+        if (!sendBtn || !input) return;
+
+        // Update button text to show active streams
+        if (this.activeStreams.size > 0) {
+            sendBtn.innerHTML = `
+                <span class="icon">⏳</span>
+                Send (${this.activeStreams.size} active)
+            `;
+            sendBtn.classList.add('processing');
+        } else {
+            sendBtn.innerHTML = `
+                <span class="icon">📤</span>
+                Send
+            `;
+            sendBtn.classList.remove('processing');
+        }
+    }
+
     addMessage(message) {
         this.messages.push(message);
-
-        // Only render if not streaming to avoid flickering
-        if (!this.isStreaming) {
-            this.renderMessages();
-        } else {
-            // During streaming, just append the message
-            this.appendMessageToDOM(message);
-        }
+        this.appendMessageToDOM(message);
     }
 
     addCollaborationMessage(collabMsg) {
@@ -589,6 +621,9 @@ class ChatComponent extends HTMLElement {
         if (data.processingTime) {
             message.processingTime = data.processingTime;
         }
+        if (data.modelUsed) {
+            message.modelUsed = data.modelUsed;
+        }
 
         // Update the message content one last time
         this.updateMessage(messageId);
@@ -663,9 +698,10 @@ class ChatComponent extends HTMLElement {
             const colorClass = isUser ? '' : this.getAgentColorClass(msg.agentName || 'Assistant');
 
             let metadata = '';
-            if (msg.tokensUsed || msg.processingTime) {
+            if (msg.tokensUsed || msg.processingTime || msg.modelUsed) {
                 metadata = `
                     <div class="message-metadata">
+                        ${msg.modelUsed ? `<span class="model-badge">🤖 ${msg.modelUsed}</span>` : ''}
                         ${msg.tokensUsed ? `<span>Tokens: ${msg.tokensUsed}</span>` : ''}
                         ${msg.processingTime ? `<span>Time: ${msg.processingTime}ms</span>` : ''}
                     </div>

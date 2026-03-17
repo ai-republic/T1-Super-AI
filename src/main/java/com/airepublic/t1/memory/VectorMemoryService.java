@@ -159,18 +159,29 @@ public class VectorMemoryService {
      * Get statistics about stored memories
      */
     public MemoryStats getStats() {
-        // SimpleVectorStore doesn't provide direct count, so we estimate
-        List<MemoryResult> all = searchSimilar("", 1000);
+        try {
+            // Use a generic query to retrieve documents instead of empty string
+            SearchRequest request = SearchRequest.builder()
+                .query("conversation history")
+                .topK(1000)
+                .similarityThreshold(0.0) // Accept all results
+                .build();
 
-        long prompts = all.stream()
-            .filter(m -> "prompt".equals(m.metadata().get("type")))
-            .count();
+            List<Document> all = vectorStore.similaritySearch(request);
 
-        long actions = all.stream()
-            .filter(m -> "action".equals(m.metadata().get("type")))
-            .count();
+            long prompts = all.stream()
+                .filter(doc -> "prompt".equals(doc.getMetadata().get("type")))
+                .count();
 
-        return new MemoryStats(prompts, actions, prompts + actions);
+            long actions = all.stream()
+                .filter(doc -> "action".equals(doc.getMetadata().get("type")))
+                .count();
+
+            return new MemoryStats(prompts, actions, prompts + actions);
+        } catch (Exception e) {
+            log.warn("Could not get memory stats", e);
+            return new MemoryStats(0, 0, 0);
+        }
     }
 
     /**
@@ -225,8 +236,16 @@ public class VectorMemoryService {
      */
     private int getMemoryCount() {
         try {
-            return searchSimilar("", 1000).size();
+            // Use a generic query to retrieve documents instead of empty string
+            SearchRequest request = SearchRequest.builder()
+                .query("conversation history")
+                .topK(1000)
+                .similarityThreshold(0.0) // Accept all results
+                .build();
+
+            return vectorStore.similaritySearch(request).size();
         } catch (Exception e) {
+            log.debug("Could not get memory count (likely empty vectorstore)", e);
             return 0;
         }
     }

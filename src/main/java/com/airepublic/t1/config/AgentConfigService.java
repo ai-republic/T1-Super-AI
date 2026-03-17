@@ -260,7 +260,9 @@ public class AgentConfigService {
                 "## 📋 Environment\n" +
                 "**Workspace**: the application workspace is located in '~/.t1-super-ai' for linux or '%USERPROFILE%/.t1-super-ai' for Windows, where you find all configurations, including '/agents', '/plugins', '/mcp-servers', '/skills' and 'USER.md'.\n"
                 +
-                "**Your workspace/Agent folder**: your workspace is located in '~/.t1-super-ai/agents/{{NAME}}' for linux or '%USERPROFILE%/.t1-super-ai/agents/{{NAME}}' for Windows, where you find the 'USAGE.md' and 'credentials.json'.\n\n" +
+                "**Your workspace/Agent folder**: your workspace is located in '~/.t1-super-ai/agents/{{NAME}}' for linux or '%USERPROFILE%/.t1-super-ai/agents/{{NAME}}' for Windows, where you find the 'USAGE.md' and 'credentials.json'.\n" +
+                "If you generate files, documents, images or other content like source code, always structure them under your agent folder '/files' folder.\n" +
+                "If you download anything from the internet save the files under the agent folder '/Downloads' folder structuring with a foldername and under that the downloaded file(s).\n\n" +
                 "### MCP Servers\n" +
                 "You are connected to a local MCP server that provides core tools that give you read/write access, bash and cmd to execute commands, web_search to search the web.\n" +
                 "External MCP server configurations can be found under the workspace folder '/mcpservers'.\n\n" +
@@ -277,7 +279,7 @@ public class AgentConfigService {
 
     public static String getCharacterGuidlinesTemplate() {
         return "- Always align with the user's preferences and work focus (see USER.md)\n" +
-                "- Do not ask too many questions unless you are unsure\n" +
+                "- Do not ask too many questions unless you are unsure. Solve the task yourself. Use your tools and skills. Or create the necessary plugin or tool or skill. Be creative and inventive!\n" +
                 "- Ask if you need credentials to access resources unless they are already defined in your agent folder 'credentials.json' file.\n\n";
     }
 
@@ -415,7 +417,7 @@ public class AgentConfigService {
         // Debug logging to see what was parsed
         log.debug("Parsed from CHARACTER.md for '{}': role='{}', guidelines='{}'", agentName, role, guidelines);
         log.debug("All parsed values - status='{}', provider='{}', model='{}', style='{}', personality='{}', emojiPreference='{}'",
-                  status, provider, model, style, personality, emojiPreference);
+                status, provider, model, style, personality, emojiPreference);
 
         // Create config from parsed data
         final IndividualAgentConfig config = new IndividualAgentConfig();
@@ -434,7 +436,7 @@ public class AgentConfigService {
         config.setGuidelines(guidelines);
 
         log.info("📋 Loaded CHARACTER.md for '{}': role='{}', style='{}', hasGuidelines={}",
-                 agentName, config.getRole(), config.getStyle(), (guidelines != null && !guidelines.isEmpty()));
+                agentName, config.getRole(), config.getStyle(), (guidelines != null && !guidelines.isEmpty()));
 
         try {
             config.setProvider(com.airepublic.t1.model.AgentConfiguration.LLMProvider.valueOf(provider.toUpperCase()));

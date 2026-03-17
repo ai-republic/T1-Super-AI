@@ -19,6 +19,7 @@ public class ConversationMessage {
     private String content;
     private String agentName; // Name of the agent that sent this message (for assistant role)
     private LocalDateTime timestamp;
+    private String modelUsed; // Model used to generate this message (for assistant role)
     @Builder.Default
     private List<ToolCall> toolCalls = new ArrayList<>();
     private String toolCallId; // for tool response messages

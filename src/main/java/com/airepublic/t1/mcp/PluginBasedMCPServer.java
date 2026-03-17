@@ -14,10 +14,13 @@ import com.airepublic.t1.tools.AgentTool;
 import com.airepublic.t1.tools.BashTool;
 import com.airepublic.t1.tools.CmdTool;
 import com.airepublic.t1.tools.CreateAgentTool;
+import com.airepublic.t1.tools.ExecuteWithTaskModelTool;
+import com.airepublic.t1.tools.GetTaskModelInfoTool;
 import com.airepublic.t1.tools.ListAgentsTool;
 import com.airepublic.t1.tools.ListDirectoryTool;
 import com.airepublic.t1.tools.ReadFileTool;
 import com.airepublic.t1.tools.SendMessageToAgentTool;
+import com.airepublic.t1.tools.SwitchToTaskModelTool;
 import com.airepublic.t1.tools.UpdateAgentCharacterTool;
 import com.airepublic.t1.tools.WebFetchTool;
 import com.airepublic.t1.tools.WriteFileTool;
@@ -64,6 +67,11 @@ public class PluginBasedMCPServer {
     private final CreateAgentTool createAgentTool;
     private final UpdateAgentCharacterTool updateAgentCharacterTool;
 
+    // Task-specific model tools
+    private final ExecuteWithTaskModelTool executeWithTaskModelTool;
+    private final GetTaskModelInfoTool getTaskModelInfoTool;
+    private final SwitchToTaskModelTool switchToTaskModelTool;
+
     // Plugin manager for loading plugin-based tools
     private final PluginManager pluginManager;
 
@@ -108,7 +116,12 @@ public class PluginBasedMCPServer {
         coreTools.put(createAgentTool.getName(), createAgentTool);
         coreTools.put(updateAgentCharacterTool.getName(), updateAgentCharacterTool);
 
-        log.info("Initialized {} core tools (including inter-agent communication and agent management tools)", coreTools.size());
+        // Task-specific model tools
+        coreTools.put(executeWithTaskModelTool.getName(), executeWithTaskModelTool);
+        coreTools.put(getTaskModelInfoTool.getName(), getTaskModelInfoTool);
+        coreTools.put(switchToTaskModelTool.getName(), switchToTaskModelTool);
+
+        log.info("Initialized {} core tools (including inter-agent communication, agent management, and task-specific model tools)", coreTools.size());
     }
 
 

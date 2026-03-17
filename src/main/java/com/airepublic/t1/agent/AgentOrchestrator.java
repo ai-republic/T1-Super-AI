@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -55,7 +56,8 @@ public class AgentOrchestrator {
 
     private boolean autoModelSelectionEnabled = true; // Default enabled
 
-    private final List<ConversationMessage> conversationHistory = new ArrayList<>();
+    // Thread-safe conversation history for concurrent request handling
+    private final List<ConversationMessage> conversationHistory = new CopyOnWriteArrayList<>();
     private static final int MAX_TOOL_ITERATIONS = 10;
     private String sessionContext = null;
     private String currentModelInfo = null; // Store current model being used
@@ -93,6 +95,7 @@ public class AgentOrchestrator {
                     .content(finalResponse)
                     .agentName(currentAgent)
                     .timestamp(LocalDateTime.now())
+                    .modelUsed(configManager.getCurrentModel())
                     .build();
             conversationHistory.add(assistantMsg);
 

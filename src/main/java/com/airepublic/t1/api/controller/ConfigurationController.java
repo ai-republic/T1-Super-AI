@@ -225,4 +225,107 @@ public class ConfigurationController {
                     .body(ApiResponse.error("Error classifying prompt: " + e.getMessage()));
         }
     }
+
+    /**
+     * Update or configure a task-specific model
+     */
+    @PutMapping("/task-model")
+    public ResponseEntity<ApiResponse<Void>> updateTaskModel(@RequestBody UpdateTaskModelRequest request) {
+        try {
+            AgentConfiguration config = configManager.getConfiguration();
+
+            AgentConfiguration.TaskType taskType = request.getTaskType();
+            AgentConfiguration.LLMProvider provider = request.getProvider();
+            String model = request.getModel();
+
+            // Validate provider is configured
+            if (!config.getLlmConfigs().containsKey(provider)) {
+                return ResponseEntity.badRequest()
+                        .body(ApiResponse.error("Provider " + provider + " is not configured. Configure it first."));
+            }
+
+            // Create or update task model config
+            AgentConfiguration.TaskModelConfig taskConfig = new AgentConfiguration.TaskModelConfig(provider, model);
+            config.getTaskModels().put(taskType, taskConfig);
+
+            configManager.saveConfiguration();
+
+            log.info("Task-specific model configured: {} -> {} / {}", taskType, provider, model);
+
+            return ResponseEntity.ok(ApiResponse.success(
+                    "Task model updated: " + taskType.getDisplayName() + " -> " + provider + " / " + model, null));
+
+        } catch (Exception e) {
+            log.error("Error updating task model", e);
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("Error updating task model: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Remove a task-specific model configuration (will use default provider)
+     */
+    @DeleteMapping("/task-model/{taskType}")
+    public ResponseEntity<ApiResponse<Void>> deleteTaskModel(@PathVariable AgentConfiguration.TaskType taskType) {
+        try {
+            AgentConfiguration config = configManager.getConfiguration();
+
+            if (config.getTaskModels().remove(taskType) != null) {
+                configManager.saveConfiguration();
+                log.info("Task-specific model removed: {}", taskType);
+                return ResponseEntity.ok(ApiResponse.success(
+                        "Task model removed: " + taskType.getDisplayName() + " (will use default provider)", null));
+            } else {
+                return ResponseEntity.ok(ApiResponse.success(
+                        "No task model configured for: " + taskType.getDisplayName(), null));
+            }
+
+        } catch (Exception e) {
+            log.error("Error deleting task model", e);
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("Error deleting task model: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Batch update multiple task-specific models
+     */
+    @PutMapping("/task-models")
+    public ResponseEntity<ApiResponse<Void>> updateTaskModels(@RequestBody UpdateTaskModelsRequest request) {
+        try {
+            AgentConfiguration config = configManager.getConfiguration();
+            int updatedCount = 0;
+            int skippedCount = 0;
+
+            for (Map.Entry<AgentConfiguration.TaskType, UpdateTaskModelsRequest.TaskModelUpdate> entry :
+                    request.getTaskModels().entrySet()) {
+
+                AgentConfiguration.TaskType taskType = entry.getKey();
+                UpdateTaskModelsRequest.TaskModelUpdate update = entry.getValue();
+
+                // Skip if provider not specified or not configured
+                if (update.getProvider() == null || !config.getLlmConfigs().containsKey(update.getProvider())) {
+                    skippedCount++;
+                    continue;
+                }
+
+                AgentConfiguration.TaskModelConfig taskConfig =
+                        new AgentConfiguration.TaskModelConfig(update.getProvider(), update.getModel());
+                config.getTaskModels().put(taskType, taskConfig);
+                updatedCount++;
+            }
+
+            configManager.saveConfiguration();
+
+            log.info("Task models batch update: {} updated, {} skipped", updatedCount, skippedCount);
+
+            return ResponseEntity.ok(ApiResponse.success(
+                    "Task models updated: " + updatedCount + " configured, " + skippedCount + " skipped", null));
+
+        } catch (Exception e) {
+            log.error("Error updating task models", e);
+            return ResponseEntity.badRequest()
+                    .body(ApiResponse.error("Error updating task models: " + e.getMessage()));
+        }
+    }
 }
