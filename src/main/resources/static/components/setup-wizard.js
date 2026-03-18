@@ -13,7 +13,7 @@ class SetupWizard extends HTMLElement {
     constructor() {
         super();
         this.currentStep = 1;
-        this.totalSteps = 5;
+        this.totalSteps = 4;
         this.formData = {
             // LLM Configuration - Multiple providers
             providers: {
@@ -48,11 +48,18 @@ class SetupWizard extends HTMLElement {
             agentSpecialization: 'General purpose assistance',
             agentPersonality: 'Professional and helpful',
             communicationStyle: 'Clear and concise',
-            emojiPreference: 'MODERATE'
+            emojiPreference: 'MODERATE',
+            guidelines: ''
         };
     }
 
     connectedCallback() {
+        // Set default guidelines
+        if (!this.formData.guidelines) {
+            this.formData.guidelines = `- Always align with the user's preferences and work focus (see USER.md)
+- Do not ask too many questions unless you are unsure. Solve the task yourself. Use your tools and skills. Or create the necessary plugin or tool or skill. Be creative and inventive!
+- Ask if you need credentials to access resources unless they are already defined in your agent folder 'credentials.json' file.`;
+        }
         this.render();
         this.attachEventListeners();
     }
@@ -101,8 +108,6 @@ class SetupWizard extends HTMLElement {
                 return this.getUserProfileStep();
             case 4:
                 return this.getAgentConfigStep();
-            case 5:
-                return this.getConfirmationStep();
             default:
                 return '';
         }
@@ -540,101 +545,25 @@ class SetupWizard extends HTMLElement {
                     Let's create your first AI agent. You can customize its personality and purpose.
                 </p>
 
-                <div class="form-group">
-                    <label for="agentName" class="form-label">
-                        Agent Name <span class="required">*</span>
-                    </label>
-                    <input
-                        type="text"
-                        id="agentName"
-                        class="form-input"
-                        placeholder="e.g., CodeHelper, DataWizard, WritingBuddy"
-                        value="${this.formData.agentName}"
-                        required
-                    >
-                    <small class="form-hint">Choose a memorable name for your agent</small>
-                </div>
-
-                <div class="form-group">
-                    <label for="agentRole" class="form-label">
-                        Agent Role <span class="required">*</span>
-                    </label>
-                    <input
-                        type="text"
-                        id="agentRole"
-                        class="form-input"
-                        placeholder="e.g., Software Development Assistant, Code Reviewer"
-                        value="${this.formData.agentRole}"
-                        required
-                    >
-                    <small class="form-hint">What is this agent's primary role?</small>
-                </div>
-
-                <div class="form-group">
-                    <label for="agentPurpose" class="form-label">
-                        Purpose
-                    </label>
-                    <textarea
-                        id="agentPurpose"
-                        class="form-input form-textarea"
-                        rows="3"
-                        placeholder="e.g., Help with code reviews, debug issues, and suggest improvements"
-                    >${this.formData.agentPurpose}</textarea>
-                    <small class="form-hint">What will this agent help you with?</small>
-                </div>
-
-                <div class="form-group">
-                    <label for="agentSpecialization" class="form-label">
-                        Specialization
-                    </label>
-                    <input
-                        type="text"
-                        id="agentSpecialization"
-                        class="form-input"
-                        placeholder="e.g., Java Spring Boot, React, Python ML"
-                        value="${this.formData.agentSpecialization}"
-                    >
-                    <small class="form-hint">Any specific technical areas of expertise?</small>
-                </div>
-
-                <div class="form-group">
-                    <label for="agentPersonality" class="form-label">
-                        Personality Traits
-                    </label>
-                    <input
-                        type="text"
-                        id="agentPersonality"
-                        class="form-input"
-                        placeholder="e.g., Professional and helpful, Friendly and encouraging"
-                        value="${this.formData.agentPersonality}"
-                    >
-                </div>
-
-                <div class="form-group">
-                    <label for="communicationStyle" class="form-label">
-                        Communication Style
-                    </label>
-                    <select id="communicationStyle" class="form-input">
-                        <option value="Clear and concise" ${this.formData.communicationStyle === 'Clear and concise' ? 'selected' : ''}>Clear and concise</option>
-                        <option value="Detailed and thorough" ${this.formData.communicationStyle === 'Detailed and thorough' ? 'selected' : ''}>Detailed and thorough</option>
-                        <option value="Casual and friendly" ${this.formData.communicationStyle === 'Casual and friendly' ? 'selected' : ''}>Casual and friendly</option>
-                        <option value="Technical and precise" ${this.formData.communicationStyle === 'Technical and precise' ? 'selected' : ''}>Technical and precise</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label for="emojiPreference" class="form-label">
-                        Emoji Usage
-                    </label>
-                    <select id="emojiPreference" class="form-input">
-                        <option value="NONE" ${this.formData.emojiPreference === 'NONE' ? 'selected' : ''}>None - Plain text only</option>
-                        <option value="MINIMAL" ${this.formData.emojiPreference === 'MINIMAL' ? 'selected' : ''}>Minimal - Rare usage</option>
-                        <option value="MODERATE" ${this.formData.emojiPreference === 'MODERATE' ? 'selected' : ''}>Moderate - Balanced</option>
-                        <option value="ENTHUSIASTIC" ${this.formData.emojiPreference === 'ENTHUSIASTIC' ? 'selected' : ''}>Enthusiastic - Frequent</option>
-                    </select>
-                </div>
+                <agent-config-form mode="create" id="wizardAgentConfig"></agent-config-form>
             </div>
         `;
+    }
+
+    populateAgentConfigForm() {
+        const configForm = document.getElementById('wizardAgentConfig');
+        if (configForm) {
+            configForm.setData({
+                name: this.formData.agentName,
+                role: this.formData.agentRole,
+                purpose: this.formData.agentPurpose,
+                specialization: this.formData.agentSpecialization,
+                personality: this.formData.agentPersonality,
+                communicationStyle: this.formData.communicationStyle,
+                emojiPreference: this.formData.emojiPreference,
+                guidelines: this.formData.guidelines
+            });
+        }
     }
 
     getConfirmationStep() {
@@ -828,77 +757,28 @@ class SetupWizard extends HTMLElement {
                 return true;
 
             case 4:
-                // Agent config validation
-                console.log('=== STEP 3 VALIDATION START ===');
-                console.log('Current wizard body HTML length:', document.getElementById('wizardBody')?.innerHTML?.length);
+                // Agent config validation using the agent-config-form component
+                console.log('=== STEP 4 VALIDATION START ===');
 
-                // Try multiple methods to get the elements
-                const agentNameEl = document.getElementById('agentName');
-                const agentRoleEl = document.getElementById('agentRole');
+                const configForm = document.getElementById('wizardAgentConfig');
+                console.log('Step 4 validation - configForm:', configForm);
 
-                // Also try querySelector as backup
-                const agentNameEl2 = document.querySelector('#agentName');
-                const agentRoleEl2 = document.querySelector('#agentRole');
-
-                // Check if elements are in the wizard body
-                const wizardBody = document.getElementById('wizardBody');
-                const agentNameInBody = wizardBody?.querySelector('#agentName');
-                const agentRoleInBody = wizardBody?.querySelector('#agentRole');
-
-                console.log('Step 3 validation - agentNameEl:', agentNameEl);
-                console.log('Step 3 validation - agentNameEl2 (querySelector):', agentNameEl2);
-                console.log('Step 3 validation - agentNameInBody:', agentNameInBody);
-                console.log('Step 3 validation - agentNameEl exists?:', agentNameEl !== null);
-                console.log('Step 3 validation - agentNameEl value:', agentNameEl?.value);
-                console.log('Step 3 validation - agentNameEl value type:', typeof agentNameEl?.value);
-
-                console.log('Step 3 validation - agentRoleEl:', agentRoleEl);
-                console.log('Step 3 validation - agentRoleEl2 (querySelector):', agentRoleEl2);
-                console.log('Step 3 validation - agentRoleInBody:', agentRoleInBody);
-                console.log('Step 3 validation - agentRoleEl exists?:', agentRoleEl !== null);
-                console.log('Step 3 validation - agentRoleEl value:', agentRoleEl?.value);
-
-                const agentName = agentNameEl?.value?.trim();
-                const agentRole = agentRoleEl?.value?.trim();
-
-                console.log('Step 3 validation - agentName after trim:', `"${agentName}"`);
-                console.log('Step 3 validation - agentName length:', agentName?.length);
-                console.log('Step 3 validation - agentRole after trim:', `"${agentRole}"`);
-                console.log('Step 3 validation - agentRole length:', agentRole?.length);
-                console.log('Step 3 validation - !agentName:', !agentName);
-                console.log('Step 3 validation - !agentRole:', !agentRole);
-
-                // If getElementById fails, try the wizard body querySelector
-                const finalAgentName = agentName || agentNameInBody?.value?.trim();
-                const finalAgentRole = agentRole || agentRoleInBody?.value?.trim();
-
-                console.log('Step 3 validation - FINAL agentName:', `"${finalAgentName}"`);
-                console.log('Step 3 validation - FINAL agentRole:', `"${finalAgentRole}"`);
-
-                if (!finalAgentName) {
-                    console.error('Validation failed: agentName is empty or undefined');
-                    this.showError('Please enter an agent name');
+                if (!configForm) {
+                    console.error('Validation failed: agent-config-form not found');
+                    this.showError('Configuration form not found');
                     return false;
                 }
 
-                if (!finalAgentRole) {
-                    console.error('Validation failed: agentRole is empty or undefined');
-                    this.showError('Please enter an agent role');
-                    return false;
-                }
+                // Use the component's built-in validation
+                const isValid = configForm.validate();
+                console.log('Step 4 validation - isValid:', isValid);
 
-                // Validate agent name format (alphanumeric, spaces, underscores, and hyphens)
-                if (!/^[a-zA-Z0-9_\- ]+$/.test(finalAgentName)) {
-                    console.error('Validation failed: agentName contains invalid characters:', finalAgentName);
-                    this.showError('Agent name can only contain letters, numbers, spaces, underscores, and hyphens');
+                if (!isValid) {
+                    // The component will show its own error message
                     return false;
                 }
 
                 console.log('Step 4 validation passed');
-                return true;
-
-            case 5:
-                // Confirmation step - no validation needed
                 return true;
 
             default:
@@ -972,23 +852,20 @@ class SetupWizard extends HTMLElement {
                 break;
 
             case 4:
-                // Use fallback to wizard body querySelector if getElementById fails
-                const wizardBody = document.getElementById('wizardBody');
+                // Get data from the agent-config-form component
+                const configForm = document.getElementById('wizardAgentConfig');
+                if (configForm) {
+                    const agentData = configForm.getData();
 
-                this.formData.agentName = document.getElementById('agentName')?.value?.trim()
-                    || wizardBody?.querySelector('#agentName')?.value?.trim() || '';
-                this.formData.agentRole = document.getElementById('agentRole')?.value?.trim()
-                    || wizardBody?.querySelector('#agentRole')?.value?.trim() || '';
-                this.formData.agentPurpose = document.getElementById('agentPurpose')?.value?.trim()
-                    || wizardBody?.querySelector('#agentPurpose')?.value?.trim() || '';
-                this.formData.agentSpecialization = document.getElementById('agentSpecialization')?.value?.trim()
-                    || wizardBody?.querySelector('#agentSpecialization')?.value?.trim() || '';
-                this.formData.agentPersonality = document.getElementById('agentPersonality')?.value?.trim()
-                    || wizardBody?.querySelector('#agentPersonality')?.value?.trim() || '';
-                this.formData.communicationStyle = document.getElementById('communicationStyle')?.value
-                    || wizardBody?.querySelector('#communicationStyle')?.value || 'Clear and concise';
-                this.formData.emojiPreference = document.getElementById('emojiPreference')?.value
-                    || wizardBody?.querySelector('#emojiPreference')?.value || 'MODERATE';
+                    this.formData.agentName = agentData.name;
+                    this.formData.agentRole = agentData.role;
+                    this.formData.agentPurpose = agentData.purpose;
+                    this.formData.agentSpecialization = agentData.specialization;
+                    this.formData.agentPersonality = agentData.personality;
+                    this.formData.communicationStyle = agentData.style;
+                    this.formData.emojiPreference = agentData.emojiPreference;
+                    this.formData.guidelines = agentData.guidelines;
+                }
 
                 console.log('Saved step 4 data:', {
                     agentName: this.formData.agentName,
@@ -997,7 +874,8 @@ class SetupWizard extends HTMLElement {
                     agentSpecialization: this.formData.agentSpecialization,
                     agentPersonality: this.formData.agentPersonality,
                     communicationStyle: this.formData.communicationStyle,
-                    emojiPreference: this.formData.emojiPreference
+                    emojiPreference: this.formData.emojiPreference,
+                    guidelines: this.formData.guidelines
                 });
                 break;
         }
@@ -1062,16 +940,24 @@ class SetupWizard extends HTMLElement {
                 const el = document.getElementById('taskModelsConfig');
                 if (el) el.style.display = 'block';
             }
+        } else if (this.currentStep === 4) {
+            // Populate agent config form with saved data
+            this.populateAgentConfigForm();
         }
     }
 
     async completeSetup() {
+        // Save the current step data before submitting
+        this.saveCurrentStepData();
+
         // Show loading state
         const completeBtn = document.getElementById('completeBtn');
         if (completeBtn) {
             completeBtn.disabled = true;
             completeBtn.innerHTML = '⏳ Setting up...';
         }
+
+        console.log('Completing setup with formData:', this.formData);
 
         try {
             // Send setup data to backend

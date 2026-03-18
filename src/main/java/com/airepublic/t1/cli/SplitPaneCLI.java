@@ -1161,24 +1161,24 @@ public class SplitPaneCLI implements CLI {
             case 8: // Communication Style
                 printOutput("");
                 printOutput("\033[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m");
-                printOutput("\033[36mSTEP 8: Constraints (Optional)\033[0m");
+                printOutput("\033[36mSTEP 8: Behavioral Guidelines (Optional)\033[0m");
                 printOutput("\033[36m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m");
                 printOutput("");
-                printOutput("\033[33mAny constraints or boundaries for this agent?\033[0m");
-                printOutput("Examples: Only provide code reviews, Focus on backend only");
+                printOutput("\033[33mDefine behavioral guidelines for this agent?\033[0m");
+                printOutput("Examples: Always provide code examples, Focus on security best practices");
                 printOutput("");
-                printOutput("→ Constraints (or Enter to skip): ");
-                hatchConversation.add("Assistant: Collected communication style, asking for constraints");
+                printOutput("→ Guidelines (or Enter to use defaults): ");
+                hatchConversation.add("Assistant: Collected communication style, asking for guidelines");
                 hatchStep++;
                 break;
 
-            case 9: // Constraints
+            case 9: // Guidelines
                 printOutput("");
                 printOutput("\033[36m═══════════════════════════════════════════════════════════════\033[0m");
                 printOutput("\033[36m           ✨ SETUP COMPLETE - CREATING YOUR PROFILE           \033[0m");
                 printOutput("\033[36m═══════════════════════════════════════════════════════════════\033[0m");
                 printOutput("");
-                hatchConversation.add("Assistant: Collected constraints, completing setup");
+                hatchConversation.add("Assistant: Collected guidelines, completing setup");
 
                 completeHatchProcess();
                 break;
@@ -1261,7 +1261,7 @@ public class SplitPaneCLI implements CLI {
                 data.put("agent_personality", userResponses.get(7));
                 data.put("communication_style", userResponses.get(8));
                 if (userResponses.size() >= 10) {
-                    data.put("constraints", userResponses.get(9));
+                    data.put("guidelines", userResponses.get(9));
                 }
             }
 
@@ -1388,7 +1388,7 @@ public class SplitPaneCLI implements CLI {
 
             // Create CHARACTER.md with behavior template
             try {
-                agentConfigService.createCharacterMd(agentConfig, AgentConfigService.getCharacterGuidlinesTemplate());
+                agentConfigService.createCharacterMd(agentConfig);
                 printOutput("");
                 printOutput("✅ CHARACTER.md created");
             } catch (final Exception e) {

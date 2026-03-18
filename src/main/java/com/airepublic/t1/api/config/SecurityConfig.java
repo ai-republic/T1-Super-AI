@@ -28,7 +28,8 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**",
                                 "/swagger-ui.html",
-                                "/actuator/health"
+                                "/actuator/health",
+                                "/api/v1/setup/**"  // Setup endpoints must be public for first-time setup
                         ).permitAll()
                         // WebSocket endpoint
                         .requestMatchers("/ws/**").authenticated()

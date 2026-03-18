@@ -206,7 +206,7 @@ public class SetupController {
             responses.put("agent_personality", request.getAgentPersonality() != null ? request.getAgentPersonality() : "Professional and helpful");
             responses.put("communication_style", request.getCommunicationStyle() != null ? request.getCommunicationStyle() : "Clear and concise");
             responses.put("emoji_preference", request.getEmojiPreference() != null ? request.getEmojiPreference() : "MODERATE");
-
+            responses.put("guidelines", request.getGuidelines() != null ? request.getGuidelines() : com.airepublic.t1.config.AgentConfigService.getCharacterGuidlinesTemplate());
             // Step 3: Complete the hatch process
             hatchingService.completeHatchProcess(responses);
 

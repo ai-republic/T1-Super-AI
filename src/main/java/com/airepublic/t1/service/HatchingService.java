@@ -71,7 +71,7 @@ public class HatchingService {
             final String style = responses.getOrDefault("communication_style", "Professional and friendly");
             final String personality = responses.getOrDefault("agent_personality", "Helpful, patient, thorough");
             final String emojiPreference = responses.getOrDefault("emoji_preference", "sparingly");
-
+            final String guidelines = responses.getOrDefault("guidelines", AgentConfigService.getCharacterGuidlinesTemplate());
             // Create USER.md in workspace root with initial agent as default
             workspaceInitializer.createUserProfile(
                     userName,
@@ -97,7 +97,7 @@ public class HatchingService {
                     style,                                              // style
                     personality,                                        // personality
                     emojiPreference,                                    // emojiPreference
-                    AgentConfigService.getCharacterGuidlinesTemplate(), // guidelines
+                    guidelines,                                             // guidelines
                     "active",                                           // status
                     LocalDateTime.now(), // createdAt
                     LocalDateTime.now(), // lastModifiedAt
@@ -106,7 +106,7 @@ public class HatchingService {
                     );
 
             // Create CHARACTER.md for the agent
-            agentConfigService.createCharacterMd(config, AgentConfigService.getCharacterGuidlinesTemplate());
+            agentConfigService.createCharacterMd(config);
             log.info("📄 Created CHARACTER.md for agent '{}'", agentName);
 
             // Create USAGE.md for the agent

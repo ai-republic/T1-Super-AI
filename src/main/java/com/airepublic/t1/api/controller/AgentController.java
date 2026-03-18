@@ -186,7 +186,7 @@ public class AgentController {
             agentConfigService.createAgentFolder(request.getName());
 
             // Create CHARACTER.md with full configuration
-            agentConfigService.createCharacterMd(config, AgentConfigService.getCharacterGuidlinesTemplate());
+            agentConfigService.createCharacterMd(config);
 
             // Create USAGE.md
             agentConfigService.createUsageMd(request.getName(), config);

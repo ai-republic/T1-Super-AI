@@ -21,30 +21,42 @@ class ChatComponent extends HTMLElement {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${protocol}//${window.location.host}/ws/chat`;
 
-        this.ws = new WebSocket(wsUrl);
+        try {
+            this.ws = new WebSocket(wsUrl);
 
-        this.ws.onopen = () => {
-            console.log('WebSocket connected');
-        };
+            this.ws.onopen = () => {
+                console.log('✅ WebSocket connected');
+            };
 
-        this.ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                this.handleWebSocketMessage(data);
-            } catch (error) {
-                console.error('Error parsing WebSocket message:', error);
-            }
-        };
+            this.ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    this.handleWebSocketMessage(data);
+                } catch (error) {
+                    console.error('Error parsing WebSocket message:', error);
+                }
+            };
 
-        this.ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-        };
+            this.ws.onerror = (error) => {
+                console.warn('⚠️ WebSocket error (non-critical):', error.message || 'Connection failed');
+            };
 
-        this.ws.onclose = () => {
-            console.log('WebSocket disconnected');
-            // Reconnect after 3 seconds
-            setTimeout(() => this.setupWebSocket(), 3000);
-        };
+            this.ws.onclose = (event) => {
+                if (event.wasClean) {
+                    console.log('WebSocket disconnected cleanly');
+                } else {
+                    console.warn('⚠️ WebSocket disconnected unexpectedly (non-critical)');
+                }
+                // Reconnect after 5 seconds (increased from 3)
+                setTimeout(() => {
+                    console.log('Attempting to reconnect WebSocket...');
+                    this.setupWebSocket();
+                }, 5000);
+            };
+        } catch (error) {
+            console.warn('⚠️ Could not establish WebSocket connection (non-critical):', error.message);
+            // WebSocket is optional, don't retry if initial connection fails
+        }
     }
 
     handleWebSocketMessage(data) {
@@ -363,10 +375,15 @@ class ChatComponent extends HTMLElement {
 
         // Create assistant message placeholder
         const assistantMessageId = 'msg-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+
+        // Add helpful message for file uploads (vision models can be slow)
+        const initialContent = files.length > 0 ?
+            '_Analyzing image with vision model... This may take a few minutes..._' : '';
+
         this.addMessage({
             id: assistantMessageId,
             role: 'assistant',
-            content: '',
+            content: initialContent,
             timestamp: new Date().toISOString(),
             streaming: true,
             agentName: this.currentAgent || 'Assistant'
@@ -387,19 +404,54 @@ class ChatComponent extends HTMLElement {
                 });
 
                 // For file uploads, use non-streaming endpoint
-                response = await fetch('/api/v1/chat/with-files', {
-                    method: 'POST',
-                    headers: getAuthHeaders(),
-                    body: formData
-                });
+                console.log('Uploading files to /api/v1/chat/with-files');
 
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                // Create abort controller for timeout (5 minutes for vision models that take longer)
+                const abortController = new AbortController();
+                const timeoutId = setTimeout(() => abortController.abort(), 300000);
+
+                try {
+                    response = await fetch('/api/v1/chat/with-files', {
+                        method: 'POST',
+                        headers: getAuthHeaders(),
+                        body: formData,
+                        signal: abortController.signal
+                    });
+                    clearTimeout(timeoutId);
+                } catch (error) {
+                    clearTimeout(timeoutId);
+                    if (error.name === 'AbortError') {
+                        throw new Error('Request timed out after 5 minutes. Vision models can take a while - please wait or try a faster model like GPT-4V or Claude 3.5.');
+                    }
+                    throw error;
                 }
 
+                console.log('Fetch completed, status:', response.status, 'ok:', response.ok);
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('File upload failed:', response.status, errorText);
+                    throw new Error(`Upload failed (${response.status}): ${errorText}`);
+                }
+
+                console.log('Parsing JSON response...');
                 const result = await response.json();
+                console.log('File upload response:', result);
+                console.log('Response structure:', {
+                    success: result.success,
+                    hasData: !!result.data,
+                    hasResponse: !!(result.data && result.data.response),
+                    responseLength: result.data && result.data.response ? result.data.response.length : 0
+                });
+
+                // Check if the response has the expected structure
+                if (!result.success || !result.data || !result.data.response) {
+                    console.error('Unexpected response structure:', result);
+                    throw new Error('Invalid response from server: ' + (result.message || 'Unknown error'));
+                }
 
                 // Update assistant message with full response (no streaming for file uploads)
+                console.log('Updating message with response:', result.data.response.substring(0, 100));
                 this.updateMessageContent(assistantMessageId, result.data.response, false);
 
                 // Remove stream tracking
@@ -827,7 +879,13 @@ class ChatComponent extends HTMLElement {
         if (message) {
             message.content = content;
             message.streaming = streaming;
-            this.updateMessage(messageId);
+
+            // If not streaming, finalize the message to remove streaming indicator
+            if (!streaming) {
+                this.finalizeMessage(messageId, {});
+            } else {
+                this.updateMessage(messageId);
+            }
         }
     }
 

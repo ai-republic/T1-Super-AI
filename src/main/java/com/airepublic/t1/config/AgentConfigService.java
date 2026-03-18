@@ -207,7 +207,7 @@ public class AgentConfigService {
         // find the index of "## General behavioral guidelines" section
         final int guidelinesIndex = existingContent.indexOf("## General behavioral guidelines");
         final String guidelinesSection = guidelinesIndex != -1 ? existingContent.substring(guidelinesIndex) : "";
-        createCharacterMd(config, guidelinesSection);
+        createCharacterMd(config);
 
         log.info("Updated CHARACTER.md for agent: {}", agentName);
     }
@@ -260,18 +260,18 @@ public class AgentConfigService {
                 "## 📋 Environment\n" +
                 "**Workspace**: the application workspace is located in '~/.t1-super-ai' for linux or '%USERPROFILE%/.t1-super-ai' for Windows, where you find all configurations, including '/agents', '/plugins', '/mcp-servers', '/skills' and 'USER.md'.\n"
                 +
-                "**Your workspace/Agent folder**: your workspace is located in '~/.t1-super-ai/agents/{{NAME}}' for linux or '%USERPROFILE%/.t1-super-ai/agents/{{NAME}}' for Windows, where you find the 'USAGE.md' and 'credentials.json'.\n" +
-                "If you generate files, documents, images or other content like source code, always structure them under your agent folder '/files' folder.\n" +
-                "If you download anything from the internet save the files under the agent folder '/Downloads' folder structuring with a foldername and under that the downloaded file(s).\n\n" +
+                "**Agent folder**: your agent specific workspace is located in '~/.t1-super-ai/agents/{{NAME}}' for linux or '%USERPROFILE%/.t1-super-ai/agents/{{NAME}}' for Windows, where you find the 'USAGE.md' and 'credentials.json'.\n" +
+                "If you generate files, documents, images or other content like source code, always structure them under your **agent folder** '/files' folder.\n" +
+                "If you download anything from the internet save the files under the **agent folder** '/Downloads' folder structuring with a foldername and under that the downloaded file(s).\n\n" +
                 "### MCP Servers\n" +
                 "You are connected to a local MCP server that provides core tools that give you read/write access, bash and cmd to execute commands, web_search to search the web.\n" +
-                "External MCP server configurations can be found under the workspace folder '/mcpservers'.\n\n" +
+                "External MCP server configurations can be found under the **workspace** folder '/mcpservers'.\n\n" +
                 "## Skills\n" +
-                "Custom skills can be found in the workspace folder '/skills'.\n\n" +
+                "Custom skills can be found in the **workspace** folder '/skills'.\n\n" +
                 "### Plugins and tools\n" +
-                "Custom plugins (each containing multiple tools) can be found in the workspace folder '/plugins'. Each tool has a 'plugins.json' file defining the tool and a README.md how to use each tool.\n\n" +
+                "Custom plugins (each containing multiple tools) can be found in the **workspace** folder '/plugins'. Each tool has a 'plugins.json' file defining the tool and a README.md how to use each tool.\n\n" +
                 "---\n" +
-                "For more information on structure and configuration new or existing tools, plugins, MCP servers, and skills, please refer to the 'USAGE.md' in your agent folder.\n\n" +
+                "For more information on structure and configuration new or existing tools, plugins, MCP servers, and skills, please refer to the 'USAGE.md' in your **agent folder**.\n\n" +
                 "---\n\n" +
                 "**Guidelines:**\n" +
                 "{{GUIDELINES}}\n\n";
@@ -280,14 +280,14 @@ public class AgentConfigService {
     public static String getCharacterGuidlinesTemplate() {
         return "- Always align with the user's preferences and work focus (see USER.md)\n" +
                 "- Do not ask too many questions unless you are unsure. Solve the task yourself. Use your tools and skills. Or create the necessary plugin or tool or skill. Be creative and inventive!\n" +
-                "- Ask if you need credentials to access resources unless they are already defined in your agent folder 'credentials.json' file.\n\n";
+                "- Ask if you need credentials to access resources unless they are already defined in your **agent folder** 'credentials.json' file.\n\n";
     }
 
     /**
      * Create CHARACTER.md from template with filled values
      * Note: User information is stored in USER.md in workspace root, not here
      */
-    public void createCharacterMd(final IndividualAgentConfig config, final String behaviorContent) throws IOException {
+    public void createCharacterMd(final IndividualAgentConfig config) throws IOException {
         final Path characterFile = getCharacterMdPath(config.getName());
         final String template = getCharacterProfileTemplate();
 
@@ -305,7 +305,6 @@ public class AgentConfigService {
                 .replace("{{PERSONALITY}}", config.getPersonality() != null ? config.getPersonality() : "Thorough and detail-oriented")
                 .replace("{{EMOJI_PREFERENCE}}", config.getEmojiPreference() != null ? config.getEmojiPreference() : "Sparingly")
                 .replace("{{GUIDELINES}}", config.getGuidelines() != null ? config.getGuidelines() : getCharacterGuidlinesTemplate()));
-        content.append("\n\n").append(behaviorContent);
 
         Files.writeString(characterFile, content.toString(), StandardCharsets.UTF_8);
         log.info("✅ Created CHARACTER.md with agent profile for '{}' (provider: {}, model: {})", config.getName(), config.getProvider(), config.getModel());
@@ -1021,7 +1020,7 @@ public class AgentConfigService {
         // Also check for legacy format (JSON files in root)
         // Exclude vectorstore config files like schemas.json
         final File[] files = agentsDir.listFiles((dir, name) ->
-            name.endsWith(".json") && !name.equals("schemas.json"));
+        name.endsWith(".json") && !name.equals("schemas.json"));
         if (files != null && files.length > 0) {
             log.info("Found {} legacy config files", files.length);
             for (final File file : files) {

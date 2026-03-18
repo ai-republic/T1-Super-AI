@@ -53,7 +53,7 @@ public class AgentHatchingWizard {
 
 
             // Create CHARACTER.md
-            agentConfigService.createCharacterMd(config, AgentConfigService.getCharacterGuidlinesTemplate());
+            agentConfigService.createCharacterMd(config);
 
             // Create USAGE.md
             agentConfigService.createUsageMd(agentName, config);

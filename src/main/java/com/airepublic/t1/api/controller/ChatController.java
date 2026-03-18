@@ -116,8 +116,25 @@ public class ChatController {
             }
 
             // Process message with attachments
-            String response = orchestrator.processMessage(message, attachments);
+            log.info("Processing message with {} attachment(s): {}", attachments.size(), message.substring(0, Math.min(50, message.length())));
+
+            String response;
+            try {
+                response = orchestrator.processMessage(message, attachments);
+            } catch (Exception e) {
+                log.error("Error processing message with attachments", e);
+                throw new RuntimeException("Error processing message: " + e.getMessage(), e);
+            }
+
             long responseTime = System.currentTimeMillis() - startTime;
+
+            if (response == null || response.isEmpty()) {
+                log.warn("Received empty response from orchestrator");
+                return ResponseEntity.internalServerError()
+                        .body(ApiResponse.error("Received empty response from AI model"));
+            }
+
+            log.info("Message processed successfully in {}ms, response length: {}", responseTime, response.length());
 
             // Build response
             ChatResponse chatResponse = ChatResponse.builder()
@@ -128,6 +145,7 @@ public class ChatController {
                     .responseTimeMs(responseTime)
                     .build();
 
+            log.debug("Returning response: {}", chatResponse);
             return ResponseEntity.ok(ApiResponse.success(chatResponse));
 
         } catch (Exception e) {

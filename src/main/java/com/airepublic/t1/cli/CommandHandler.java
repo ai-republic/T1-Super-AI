@@ -662,7 +662,7 @@ public class CommandHandler {
             // Create agent folder and CHARACTER.md
             try {
                 agentConfigService.createAgentFolder(agentName);
-                agentConfigService.createCharacterMd(agentConfig, AgentConfigService.getCharacterGuidlinesTemplate());
+                agentConfigService.createCharacterMd(agentConfig);
                 agentConfigService.createUsageMd(agentName, agentConfig);
             } catch (final Exception e) {
                 formatter.printError("Warning: Could not create agent files: " + e.getMessage());

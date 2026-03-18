@@ -2,6 +2,7 @@ class CharacterEditor extends HTMLElement {
     constructor() {
         super();
         this.agentDetails = null;
+        this.configForm = null;
     }
 
     connectedCallback() {
@@ -12,88 +13,7 @@ class CharacterEditor extends HTMLElement {
         this.innerHTML = `
             <div class="character-editor">
                 <form id="characterForm">
-                    <div class="form-section">
-                        <h3>Basic Information</h3>
-                        <div class="form-group">
-                            <label for="agentName">Agent Name *</label>
-                            <input type="text" id="agentName" class="form-control" required readonly>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="agentRole">Role</label>
-                            <input type="text" id="agentRole" class="form-control" placeholder="e.g., Software Developer, Data Analyst">
-                        </div>
-
-                        <div class="form-group">
-                            <label for="agentPurpose">Purpose</label>
-                            <textarea id="agentPurpose" class="form-control" rows="3"
-                                placeholder="What is this agent designed to do?"></textarea>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="agentSpecialization">Specialization</label>
-                            <textarea id="agentSpecialization" class="form-control" rows="3"
-                                placeholder="What are this agent's areas of expertise?"></textarea>
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <h3>Provider & Model</h3>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="agentProvider">Provider</label>
-                                <select id="agentProvider" class="form-control">
-                                    <option value="">Use Default</option>
-                                    <option value="OPENAI">OpenAI</option>
-                                    <option value="ANTHROPIC">Anthropic</option>
-                                    <option value="OLLAMA">Ollama</option>
-                                    <option value="GOOGLE">Google</option>
-                                    <option value="AZURE_OPENAI">Azure OpenAI</option>
-                                </select>
-                            </div>
-
-                            <div class="form-group">
-                                <label for="agentModel">Model</label>
-                                <input type="text" id="agentModel" class="form-control"
-                                    placeholder="e.g., gpt-4, claude-3-opus">
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <h3>Personality</h3>
-                        <div class="form-group">
-                            <label for="agentStyle">Communication Style</label>
-                            <textarea id="agentStyle" class="form-control" rows="3"
-                                placeholder="How should this agent communicate? (e.g., formal, casual, technical)"></textarea>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="agentPersonality">Personality Traits</label>
-                            <textarea id="agentPersonality" class="form-control" rows="3"
-                                placeholder="Describe personality characteristics"></textarea>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="agentEmoji">Emoji Preference</label>
-                            <select id="agentEmoji" class="form-control">
-                                <option value="NONE">None</option>
-                                <option value="MINIMAL">Minimal</option>
-                                <option value="MODERATE">Moderate</option>
-                                <option value="ENTHUSIASTIC">Enthusiastic</option>
-                            </select>
-                            <small class="form-help">How often should the agent use emojis?</small>
-                        </div>
-                    </div>
-
-                    <div class="form-section">
-                        <h3>Constraints & Guidelines</h3>
-                        <div class="form-group">
-                            <label for="agentGuidelines">Additional Guidelines</label>
-                            <textarea id="agentGuidelines" class="form-control" rows="4"
-                                placeholder="Any other behavioral guidelines, instructions or rules this agent should follow"></textarea>
-                        </div>
-                    </div>
+                    <agent-config-form mode="edit" read-only-name="true"></agent-config-form>
 
                     <div class="form-actions">
                         <button type="button" class="btn btn-secondary" onclick="closeCharacterModal()">Cancel</button>
@@ -107,10 +27,17 @@ class CharacterEditor extends HTMLElement {
     }
 
     setupEventListeners() {
+        this.configForm = this.querySelector('agent-config-form');
+
         const form = this.querySelector('#characterForm');
         form?.addEventListener('submit', (e) => {
             e.preventDefault();
             this.saveCharacter();
+        });
+
+        // Listen for validation errors from the config form
+        this.configForm?.addEventListener('validation-error', (e) => {
+            showToast(e.detail.message, 'error');
         });
     }
 
@@ -153,45 +80,39 @@ class CharacterEditor extends HTMLElement {
     populateForm() {
         if (!this.agentDetails) return;
 
-        const fields = {
-            agentName: this.agentDetails.name || '',
-            agentRole: this.agentDetails.role || '',
-            agentPurpose: this.agentDetails.purpose || '',
-            agentSpecialization: this.agentDetails.specialization || '',
-            agentProvider: this.agentDetails.provider || '',
-            agentModel: this.agentDetails.model || '',
-            agentStyle: this.agentDetails.style || '',
-            agentPersonality: this.agentDetails.personality || '',
-            agentEmoji: this.agentDetails.emojiPreference || 'NONE',
-            agentGuidelines: this.agentDetails.guidelines || ''
-        };
+        if (!this.configForm) {
+            this.configForm = this.querySelector('agent-config-form');
+        }
 
-        Object.entries(fields).forEach(([id, value]) => {
-            const element = this.querySelector(`#${id}`);
-            if (element) {
-                element.value = value;
-            }
-        });
+        if (this.configForm) {
+            this.configForm.setData(this.agentDetails);
+        }
     }
 
     async saveCharacter() {
-        const agentName = this.querySelector('#agentName').value;
+        if (!this.configForm) {
+            this.configForm = this.querySelector('agent-config-form');
+        }
 
-        if (!agentName) {
-            showToast('Agent name is required', 'error');
+        // Validate form
+        if (!this.configForm.validate()) {
             return;
         }
 
+        const agentData = this.configForm.getData();
+        const agentName = agentData.name;
+
+        // Prepare update data (name is excluded from updates)
         const updateData = {
-            role: this.querySelector('#agentRole').value,
-            purpose: this.querySelector('#agentPurpose').value,
-            specialization: this.querySelector('#agentSpecialization').value,
-            provider: this.querySelector('#agentProvider').value || null,
-            model: this.querySelector('#agentModel').value || null,
-            style: this.querySelector('#agentStyle').value,
-            personality: this.querySelector('#agentPersonality').value,
-            emojiPreference: this.querySelector('#agentEmoji').value,
-            guidelines: this.querySelector('#agentGuidelines').value
+            role: agentData.role,
+            purpose: agentData.purpose,
+            specialization: agentData.specialization,
+            provider: agentData.provider || null,
+            model: agentData.model || null,
+            style: agentData.style,
+            personality: agentData.personality,
+            emojiPreference: agentData.emojiPreference,
+            guidelines: agentData.guidelines
         };
 
         try {

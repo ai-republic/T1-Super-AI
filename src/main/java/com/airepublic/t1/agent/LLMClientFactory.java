@@ -230,13 +230,21 @@ public class LLMClientFactory {
                             .defaultCodecs()
                             .maxInMemorySize(10 * 1024 * 1024)); // 10MB buffer
 
-            // Create RestClient builder with increased timeout
+            // Create request factory with proper timeouts
+            // CRITICAL: Set both connect AND read timeouts to prevent hanging
+            org.springframework.http.client.JdkClientHttpRequestFactory requestFactory =
+                new org.springframework.http.client.JdkClientHttpRequestFactory(
+                    java.net.http.HttpClient.newBuilder()
+                        .connectTimeout(Duration.ofSeconds(30))
+                        .build()
+                );
+            requestFactory.setReadTimeout(Duration.ofSeconds(120)); // 2 minute read timeout
+
+            // Create RestClient builder
+            // IMPORTANT: Add "Connection: close" header to prevent connection buffering issues with Ollama
             final RestClient.Builder restClientBuilder = RestClient.builder()
-                    .requestFactory(new org.springframework.http.client.JdkClientHttpRequestFactory(
-                            java.net.http.HttpClient.newBuilder()
-                            .connectTimeout(Duration.ofMinutes(5))
-                            .build()
-                            ));
+                    .requestFactory(requestFactory)
+                    .defaultHeader("Connection", "close"); // Force connection close after each request
 
             // Create Ollama API using builder pattern (Spring AI 2.0)
             final OllamaApi ollamaApi = OllamaApi.builder()

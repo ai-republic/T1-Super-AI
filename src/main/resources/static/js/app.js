@@ -84,6 +84,9 @@ async function checkAndShowSetupWizard() {
             if (result.success && result.data && result.data.needsSetup) {
                 console.log('🥚 First-time setup needed - showing wizard');
 
+                // Wait for the custom element to be defined
+                await customElements.whenDefined('setup-wizard');
+
                 // Show the setup wizard
                 const wizard = document.querySelector('setup-wizard');
                 if (wizard) {

@@ -223,7 +223,7 @@ public class CreateAgentTool implements AgentTool {
 
             // Step 3: Create CHARACTER.md
             log.info("Creating CHARACTER.md for '{}'", name);
-            agentConfigService.createCharacterMd(config, AgentConfigService.getCharacterGuidlinesTemplate());
+            agentConfigService.createCharacterMd(config);
 
             // Step 4: Create USAGE.md
             log.info("Creating USAGE.md for '{}'", name);

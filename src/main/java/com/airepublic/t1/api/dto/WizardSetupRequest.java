@@ -31,7 +31,7 @@ public class WizardSetupRequest {
     private String agentPersonality;
     private String communicationStyle;
     private String emojiPreference;
-
+    private String guidelines;
     @Data
     public static class ProviderConfig {
         private boolean enabled;

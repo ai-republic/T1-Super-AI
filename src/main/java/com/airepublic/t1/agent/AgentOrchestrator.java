@@ -74,6 +74,8 @@ public class AgentOrchestrator {
     }
 
     public String processMessage(final String userMessage, final List<MessageAttachment> attachments) {
+        log.info("🚀 Processing message with {} attachments", attachments != null ? attachments.size() : 0);
+
         // Add user message to history with attachments
         final ConversationMessage userMsg = ConversationMessage.builder()
                 .role("user")
@@ -85,7 +87,9 @@ public class AgentOrchestrator {
 
         try {
             // Get the appropriate chat client based on automatic model selection
+            log.debug("Selecting chat client for message");
             final ChatClient chatClient = selectChatClient(userMessage);
+            log.info("✅ Selected chat client");
 
             // Search for relevant past context if memory service is available
             String contextPrefix = "";
@@ -98,7 +102,9 @@ public class AgentOrchestrator {
             }
 
             // Conversation loop with tool calling
+            log.info("🔄 Starting conversation loop with enhanced message");
             final String finalResponse = runConversationLoop(chatClient, contextPrefix + userMessage);
+            log.info("✅ Conversation loop completed, response length: {}", finalResponse != null ? finalResponse.length() : 0);
 
             // Add assistant response to history
             final String currentAgent = agentManager != null ? agentManager.getCurrentAgentName() : null;
@@ -174,7 +180,8 @@ public class AgentOrchestrator {
                 config.getTaskModels().get(taskType);
 
         if (taskConfig == null) {
-            log.debug("Task type {} detected but no task-specific model configured, using default", taskType);
+            log.warn("⚠️ Task type {} detected but no task-specific model configured! Using default provider instead.", taskType);
+            log.warn("💡 To use task-specific models, configure them with: /task-model set {} <provider> <model>", taskType);
             return llmClientFactory.getChatClient(config.getDefaultProvider());
         }
 
@@ -219,30 +226,84 @@ public class AgentOrchestrator {
     private String runConversationLoop(final ChatClient chatClient, final String enhancedUserMessage) {
         final List<Message> messages = convertHistoryToMessages();
 
+        log.info("📝 Replacing last message with enhanced version (preserving media)");
+
         // Replace the last user message with the enhanced one (with context)
-        if (!messages.isEmpty() && messages.get(messages.size() - 1) instanceof UserMessage) {
-            messages.set(messages.size() - 1, new UserMessage(enhancedUserMessage));
+        // BUT preserve any media attachments from the original message
+        if (!messages.isEmpty() && messages.get(messages.size() - 1) instanceof UserMessage lastUserMessage) {
+            try {
+                // Check if the last user message has media attachments
+                if (lastUserMessage.getMedia() != null && !lastUserMessage.getMedia().isEmpty()) {
+                    log.info("🖼️ Found {} media attachment(s) to preserve", lastUserMessage.getMedia().size());
+
+                    // Preserve media attachments when replacing with enhanced message
+                    var enhancedMessageBuilder = UserMessage.builder()
+                            .text(enhancedUserMessage);
+
+                    // Add all media from the original message
+                    int mediaCount = 0;
+                    for (var media : lastUserMessage.getMedia()) {
+                        enhancedMessageBuilder.media(media);
+                        mediaCount++;
+                        log.debug("Added media {} to enhanced message", mediaCount);
+                    }
+
+                    log.info("✅ Building enhanced message with {} media attachment(s)", mediaCount);
+                    messages.set(messages.size() - 1, enhancedMessageBuilder.build());
+                    log.info("✅ Enhanced message with media set successfully");
+                } else {
+                    log.debug("No media attachments, using text-only message");
+                    // No media, just replace with text
+                    messages.set(messages.size() - 1, new UserMessage(enhancedUserMessage));
+                }
+            } catch (Exception e) {
+                log.error("❌ Error replacing message with enhanced version", e);
+                throw new RuntimeException("Failed to enhance message with media", e);
+            }
         }
+
+        log.info("📋 Message list has {} messages total", messages.size());
         int iteration = 0;
 
         // Tools are now registered as default tools in LLMClientFactory
         // No need to pass them with each request
         log.debug("Using default tools registered with ChatClient");
 
+        log.info("🔁 Entering conversation loop (max {} iterations)", MAX_TOOL_ITERATIONS);
+
         while (iteration < MAX_TOOL_ITERATIONS) {
             iteration++;
+            log.info("🔄 Loop iteration {}/{}", iteration, MAX_TOOL_ITERATIONS);
 
             // Build prompt - tools are automatically available from ChatClient defaults
+            log.info("📦 Building prompt with {} messages", messages.size());
             final Prompt prompt = new Prompt(messages);
+            log.info("✅ Prompt built successfully");
 
             try {
                 // Call LLM with tools enabled
-                final ChatResponse response = chatClient.prompt(prompt)
-                        .call()
-                        .chatResponse();
+                log.info("🤖 Calling LLM (iteration {}) with model via ChatClient...", iteration);
 
+                final ChatResponse response;
+                try {
+                    long llmStart = System.currentTimeMillis();
+                    // Use call() for non-streaming response
+                    // The chatResponse() method waits for the complete response
+                    response = chatClient.prompt(prompt)
+                            .call()
+                            .chatResponse();
+                    long llmTime = System.currentTimeMillis() - llmStart;
+                    log.info("✅ LLM responded successfully in {}ms", llmTime);
+                } catch (Exception llmError) {
+                    log.error("❌ LLM call failed: {}", llmError.getMessage(), llmError);
+                    throw new RuntimeException("LLM API call failed: " + llmError.getMessage(), llmError);
+                }
+
+                log.info("📝 Processing LLM response...");
                 final AssistantMessage assistantMessage = response.getResult().getOutput();
+                log.info("✅ Got assistant message, adding to conversation");
                 messages.add(assistantMessage);
+                log.info("✅ Message added to list");
 
                 // Check if there are tool calls
                 if (assistantMessage.getToolCalls() == null || assistantMessage.getToolCalls().isEmpty()) {
@@ -375,6 +436,7 @@ public class AgentOrchestrator {
             if ("user".equals(msg.getRole())) {
                 // Check if message has attachments
                 if (msg.getAttachments() != null && !msg.getAttachments().isEmpty()) {
+                    log.info("📎 Converting user message with {} attachment(s)", msg.getAttachments().size());
                     // Create UserMessage with media content using builder
                     var userMessageBuilder = UserMessage.builder()
                             .text(msg.getContent());
@@ -386,12 +448,14 @@ public class AgentOrchestrator {
                             byte[] content = Base64.getDecoder().decode(attachment.getContentBase64());
                             ByteArrayResource resource = new ByteArrayResource(content);
                             userMessageBuilder.media(new Media(mimeType, resource));
-                            log.debug("Added media attachment: {} ({})", attachment.getFilename(), attachment.getMimeType());
+                            log.info("✅ Added media attachment: {} ({}) - {} bytes",
+                                    attachment.getFilename(), attachment.getMimeType(), content.length);
                         } catch (Exception e) {
-                            log.warn("Failed to process attachment: {}", attachment.getFilename(), e);
+                            log.error("❌ Failed to process attachment: {}", attachment.getFilename(), e);
                         }
                     }
                     messages.add(userMessageBuilder.build());
+                    log.info("✅ User message with media added to conversation");
                 } else {
                     messages.add(new UserMessage(msg.getContent()));
                 }
