@@ -258,11 +258,27 @@ public class AgentConfigService {
                 "**Personality:** {{PERSONALITY}}\n" +
                 "**Emoji Preference:** {{EMOJI_PREFERENCE}}\n\n" +
                 "## 📋 Environment\n" +
-                "**Workspace**: the application workspace is located in '~/.t1-super-ai' for linux or '%USERPROFILE%/.t1-super-ai' for Windows, where you find all configurations, including '/agents', '/plugins', '/mcp-servers', '/skills' and 'USER.md'.\n"
-                +
-                "**Agent folder**: your agent specific workspace is located in '~/.t1-super-ai/agents/{{NAME}}' for linux or '%USERPROFILE%/.t1-super-ai/agents/{{NAME}}' for Windows, where you find the 'USAGE.md' and 'credentials.json'.\n" +
-                "If you generate files, documents, images or other content like source code, always structure them under your **agent folder** '/files' folder.\n" +
-                "If you download anything from the internet save the files under the **agent folder** '/Downloads' folder structuring with a foldername and under that the downloaded file(s).\n\n" +
+                "Your workspace root is in the user’s home directory:\n"
+                + "- Linux/macOS: `~/.t1-super-ai/{{NAME}}/`\n"
+                + "- Windows: `%USERPROFILE%\\.t1-super-ai\\{{NAME}}\\`\n"
+                + "\n"
+                + "Use these subfolders:\n"
+                + "- `Content` — for all files you create, generate, modify, or organize for the task\n"
+                + "- `Downloads` — for all files downloaded from the internet\n"
+                + "\n"
+                + "Rules:\n"
+                + "1. Treat `~/.t1-super-ai/{{NAME}}/` or `%USERPROFILE%\\.t1-super-ai\\{{NAME}}\\` as your only task workspace.\n"
+                + "2. Before starting, create a folder structure and files that represent the task.\n"
+                + "3. Save all created/generated files under `Content`.\n"
+                + "4. Save all internet-downloaded files under `Downloads`.\n"
+                + "5. Do not write task files outside this workspace unless explicitly instructed or if you need to write a plugin, tool, skill, mcp-server or another agent (see USAGE.md).\n"
+                + "6. Use clear, descriptive folder and file names.\n"
+                + "\n"
+                + "Example:\n"
+                + "- Linux/macOS: `~/.t1-super-ai/{{NAME}}/Content`\n"
+                + "- Windows: `%USERPROFILE%\\.t1-super-ai\\{{NAME}}\\Content`\n"
+                + "- Linux/macOS: `~/.t1-super-ai/{{NAME}}/Downloads`\n"
+                + "- Windows: `%USERPROFILE%\\.t1-super-ai\\{{NAME}}\\Downloads`\n\n" +
                 "### MCP Servers\n" +
                 "You are connected to a local MCP server that provides core tools that give you read/write access, bash and cmd to execute commands, web_search to search the web.\n" +
                 "External MCP server configurations can be found under the **workspace** folder '/mcpservers'.\n\n" +
@@ -891,7 +907,8 @@ public class AgentConfigService {
                 }
                 ```
 
-                **File**: `~/.t1-super-ai/skills/skill_name.json`
+                **File**: Write/update skills in the user's home folder under `.t1-super-ai/skills/<skill_name>.json`
+                Replace <skill_name> with the detailed name of the skill.
 
                 ## MCP Servers
 
@@ -933,7 +950,8 @@ public class AgentConfigService {
                 }
                 ```
 
-                **File**: `~/.t1-super-ai/mcp-servers/server_name.json`
+                **File**: Write/update mcp-server entries in the user's home folder under  `~/.t1-super-ai/mcp-servers/<server_name>.json`
+                Replace <server_name> with the detailed name of the mcp-server.
 
                 ## Notes
 
