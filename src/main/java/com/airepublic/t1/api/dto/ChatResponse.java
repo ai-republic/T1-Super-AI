@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 public class ChatResponse {
     private String response;
     private String agentName;
+    private String panelId; // Unique identifier matching the request panel
     private String modelUsed;
     private LocalDateTime timestamp;
     private Long responseTimeMs;

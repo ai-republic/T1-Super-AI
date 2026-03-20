@@ -1,5 +1,6 @@
 package com.airepublic.t1.api.dto;
 
+import com.airepublic.t1.model.AgentConfiguration.LLMProvider;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -37,4 +38,10 @@ public class AgentInfo {
 
     @Schema(description = "Whether this agent is the currently active agent", example = "true")
     private Boolean isCurrentAgent;
+
+    @Schema(description = "LLM provider for this agent", example = "OPENAI")
+    private LLMProvider provider;
+
+    @Schema(description = "LLM model for this agent", example = "gpt-4")
+    private String model;
 }

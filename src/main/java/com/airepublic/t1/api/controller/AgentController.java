@@ -84,6 +84,8 @@ public class AgentController {
                                 .lastActiveAt(agent.getLastActiveAt())
                                 .conversationCount(agent.getConversationHistory().size())
                                 .isCurrentAgent(agent.getName().equals(currentAgentName))
+                                .provider(config != null ? config.getProvider() : null)
+                                .model(config != null ? config.getModel() : null)
                                 .build();
                     })
                     .collect(Collectors.toList());
@@ -198,6 +200,8 @@ public class AgentController {
                     .lastActiveAt(agent.getLastActiveAt())
                     .conversationCount(agent.getConversationHistory().size())
                     .isCurrentAgent(false)
+                    .provider(config != null ? config.getProvider() : null)
+                    .model(config != null ? config.getModel() : null)
                     .build();
 
             return ResponseEntity.ok(com.airepublic.t1.api.dto.ApiResponse.success(
@@ -389,6 +393,8 @@ public class AgentController {
                     .lastActiveAt(agent.getLastActiveAt())
                     .conversationCount(agent.getConversationHistory().size())
                     .isCurrentAgent(true)
+                    .provider(config != null ? config.getProvider() : null)
+                    .model(config != null ? config.getModel() : null)
                     .build();
 
             return ResponseEntity.ok(com.airepublic.t1.api.dto.ApiResponse.success(agentInfo));
@@ -483,6 +489,7 @@ public class AgentController {
 
             // Build response
             final String currentAgentName = agentManager.getCurrentAgentName();
+            final IndividualAgentConfig updatedConfig = updatedAgent.getConfig();
             final AgentInfo agentInfo = AgentInfo.builder()
                     .name(updatedAgent.getName())
                     .status(updatedAgent.getStatus())
@@ -490,6 +497,8 @@ public class AgentController {
                     .lastActiveAt(updatedAgent.getLastActiveAt())
                     .conversationCount(updatedAgent.getConversationHistory().size())
                     .isCurrentAgent(updatedAgent.getName().equals(currentAgentName))
+                    .provider(updatedConfig != null ? updatedConfig.getProvider() : null)
+                    .model(updatedConfig != null ? updatedConfig.getModel() : null)
                     .build();
 
             return ResponseEntity.ok(com.airepublic.t1.api.dto.ApiResponse.success(

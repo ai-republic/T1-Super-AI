@@ -44,35 +44,48 @@ public class ChatController {
     public ResponseEntity<ApiResponse<ChatResponse>> sendMessage(@RequestBody ChatRequest request) {
         log.info("Received chat request: {}", request.getMessage());
 
+        // Capture request parameters
+        final String requestAgentName = (request.getAgentName() != null && !request.getAgentName().isEmpty())
+            ? request.getAgentName()
+            : agentManager.getCurrentAgentName();
+        final String requestPanelId = (request.getPanelId() != null && !request.getPanelId().isEmpty())
+            ? request.getPanelId()
+            : "default-" + System.currentTimeMillis();
+
+        log.info("🚀 POST request - Agent: {}, Panel: {}", requestAgentName, requestPanelId);
+
         try {
+            // Set thread-local agent context for complete isolation
+            orchestrator.setThreadAgentContext(requestAgentName, requestPanelId);
+
             long startTime = System.currentTimeMillis();
 
-            // Switch agent if specified
-            if (request.getAgentName() != null && !request.getAgentName().isEmpty()) {
-                if (!agentManager.getCurrentAgentName().equals(request.getAgentName())) {
-                    agentManager.switchToAgent(request.getAgentName());
-                }
-            }
-
-            // Process message with attachments
+            // Process message with attachments - orchestrator will use thread-local context
             String response = orchestrator.processMessage(request.getMessage(), request.getAttachments());
             long responseTime = System.currentTimeMillis() - startTime;
 
-            // Build response
+            // Build response with agent name and panel ID
             ChatResponse chatResponse = ChatResponse.builder()
                     .response(response)
-                    .agentName(agentManager.getCurrentAgentName())
+                    .agentName(requestAgentName)
+                    .panelId(requestPanelId)
                     .modelUsed(configManager.getCurrentModel())
                     .timestamp(LocalDateTime.now())
                     .responseTimeMs(responseTime)
                     .build();
 
+            log.info("✅ POST completed - Agent: {}, Panel: {}, Time: {}ms",
+                    requestAgentName, requestPanelId, responseTime);
+
             return ResponseEntity.ok(ApiResponse.success(chatResponse));
 
         } catch (Exception e) {
-            log.error("Error processing chat message", e);
+            log.error("❌ POST error - Agent: {}, Panel: {}", requestAgentName, requestPanelId, e);
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("Error processing message: " + e.getMessage()));
+        } finally {
+            // CRITICAL: Always clear thread-local context to prevent memory leaks
+            orchestrator.clearThreadAgentContext();
         }
     }
 
@@ -83,40 +96,48 @@ public class ChatController {
     public ResponseEntity<ApiResponse<ChatResponse>> sendMessageWithFiles(
             @RequestParam String message,
             @RequestParam(required = false) MultipartFile[] files,
-            @RequestParam(required = false) String agentName) {
+            @RequestParam(required = false) String agentName,
+            @RequestParam(required = false) String panelId) {
 
         log.info("Received chat request with {} file(s): {}",
                  files != null ? files.length : 0,
                  message.substring(0, Math.min(50, message.length())));
 
+        // Capture request parameters
+        final String requestAgentName = (agentName != null && !agentName.isEmpty())
+            ? agentName
+            : agentManager.getCurrentAgentName();
+        final String requestPanelId = (panelId != null && !panelId.isEmpty())
+            ? panelId
+            : "default-" + System.currentTimeMillis();
+
+        log.info("🚀 Files request - Agent: {}, Panel: {}", requestAgentName, requestPanelId);
+
+        // Process files
+        List<MessageAttachment> attachments = new ArrayList<>();
+        if (files != null && files.length > 0) {
+            for (MultipartFile file : files) {
+                try {
+                    MessageAttachment attachment = fileAttachmentService.processFile(file);
+                    attachments.add(attachment);
+                    log.debug("Processed file: {} ({} bytes)", attachment.getFilename(), attachment.getFileSize());
+                } catch (Exception e) {
+                    log.error("Error processing file: {}", file.getOriginalFilename(), e);
+                    return ResponseEntity.badRequest()
+                            .body(ApiResponse.error("Error processing file " + file.getOriginalFilename() + ": " + e.getMessage()));
+                }
+            }
+        }
+
         try {
+            // Set thread-local agent context for complete isolation
+            orchestrator.setThreadAgentContext(requestAgentName, requestPanelId);
+
             long startTime = System.currentTimeMillis();
 
-            // Switch agent if specified
-            if (agentName != null && !agentName.isEmpty()) {
-                if (!agentManager.getCurrentAgentName().equals(agentName)) {
-                    agentManager.switchToAgent(agentName);
-                }
-            }
-
-            // Process uploaded files
-            List<MessageAttachment> attachments = new ArrayList<>();
-            if (files != null && files.length > 0) {
-                for (MultipartFile file : files) {
-                    try {
-                        MessageAttachment attachment = fileAttachmentService.processFile(file);
-                        attachments.add(attachment);
-                        log.debug("Processed file: {} ({} bytes)", attachment.getFilename(), attachment.getFileSize());
-                    } catch (Exception e) {
-                        log.error("Error processing file: {}", file.getOriginalFilename(), e);
-                        return ResponseEntity.badRequest()
-                                .body(ApiResponse.error("Error processing file " + file.getOriginalFilename() + ": " + e.getMessage()));
-                    }
-                }
-            }
-
-            // Process message with attachments
-            log.info("Processing message with {} attachment(s): {}", attachments.size(), message.substring(0, Math.min(50, message.length())));
+            // Process message with attachments - orchestrator will use thread-local context
+            log.info("Processing message for agent '{}' with {} attachment(s)",
+                    requestAgentName, attachments.size());
 
             String response;
             try {
@@ -134,50 +155,64 @@ public class ChatController {
                         .body(ApiResponse.error("Received empty response from AI model"));
             }
 
-            log.info("Message processed successfully in {}ms, response length: {}", responseTime, response.length());
+            log.info("✅ Files completed - Agent: {}, Panel: {}, Time: {}ms, Response: {} chars",
+                    requestAgentName, requestPanelId, responseTime, response.length());
 
-            // Build response
+            // Build response with agent name and panel ID
             ChatResponse chatResponse = ChatResponse.builder()
                     .response(response)
-                    .agentName(agentManager.getCurrentAgentName())
+                    .agentName(requestAgentName)
+                    .panelId(requestPanelId)
                     .modelUsed(configManager.getCurrentModel())
                     .timestamp(LocalDateTime.now())
                     .responseTimeMs(responseTime)
                     .build();
 
-            log.debug("Returning response: {}", chatResponse);
             return ResponseEntity.ok(ApiResponse.success(chatResponse));
 
         } catch (Exception e) {
-            log.error("Error processing chat message with files", e);
+            log.error("❌ Files error - Agent: {}, Panel: {}", requestAgentName, requestPanelId, e);
             return ResponseEntity.internalServerError()
                     .body(ApiResponse.error("Error processing message: " + e.getMessage()));
+        } finally {
+            // CRITICAL: Always clear thread-local context to prevent memory leaks
+            orchestrator.clearThreadAgentContext();
         }
     }
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter streamMessage(@RequestParam String message,
-                                   @RequestParam(required = false) String agentName) {
+                                   @RequestParam(required = false) String agentName,
+                                   @RequestParam(required = false) String panelId) {
         log.debug("SSE stream request for message: {}", message.substring(0, Math.min(50, message.length())));
         SseEmitter emitter = new SseEmitter(300000L); // 5 minute timeout
 
+        // Capture request parameters
+        final String requestAgentName = (agentName != null && !agentName.isEmpty())
+            ? agentName
+            : agentManager.getCurrentAgentName();
+        final String requestPanelId = (panelId != null && !panelId.isEmpty())
+            ? panelId
+            : "default-" + System.currentTimeMillis();
+
+        log.info("🚀 Stream request - Agent: {}, Panel: {}", requestAgentName, requestPanelId);
+
+        // Execute in separate thread - NO SYNCHRONIZATION for parallel processing
         executorService.execute(() -> {
             long startTime = System.currentTimeMillis();
 
             try {
-                // Switch agent if specified
-                if (agentName != null && !agentName.isEmpty()) {
-                    if (!agentManager.getCurrentAgentName().equals(agentName)) {
-                        agentManager.switchToAgent(agentName);
-                    }
-                }
+                // Set thread-local agent context for complete isolation
+                orchestrator.setThreadAgentContext(requestAgentName, requestPanelId);
+                log.debug("Thread {} processing - Agent: {}, Panel: {}",
+                         Thread.currentThread().getName(), requestAgentName, requestPanelId);
 
                 // Send start event
                 emitter.send(SseEmitter.event()
                         .name("start")
                         .data("Processing message..."));
 
-                // Process message (currently blocking - need to implement streaming)
+                // Process message - orchestrator will use thread-local agent context
                 String response = orchestrator.processMessage(message);
 
                 // Send response in chunks (7 words at a time)
@@ -203,22 +238,25 @@ public class ChatController {
                 // Calculate response time
                 long responseTime = System.currentTimeMillis() - startTime;
 
-                // Send complete event with JSON metadata including model used
+                // Send complete event with JSON metadata including model used and panel ID
                 String modelUsed = configManager.getCurrentModel();
                 String completeData = String.format(
-                    "{\"tokensUsed\":0,\"processingTime\":%d,\"modelUsed\":\"%s\"}",
+                    "{\"tokensUsed\":0,\"processingTime\":%d,\"modelUsed\":\"%s\",\"agentName\":\"%s\",\"panelId\":\"%s\"}",
                     responseTime,
-                    modelUsed != null ? modelUsed : ""
+                    modelUsed != null ? modelUsed : "",
+                    requestAgentName,
+                    requestPanelId
                 );
                 emitter.send(SseEmitter.event()
                         .name("complete")
                         .data(completeData));
 
                 emitter.complete();
-                log.debug("Stream completed in {}ms", responseTime);
+                log.info("✅ Stream completed - Agent: {}, Panel: {}, Time: {}ms",
+                        requestAgentName, requestPanelId, responseTime);
 
             } catch (Exception e) {
-                log.error("Error streaming message: {}", e.getMessage(), e);
+                log.error("❌ Stream error - Agent: {}, Panel: {}", requestAgentName, requestPanelId, e);
                 try {
                     // Send error message as a chunk
                     emitter.send(SseEmitter.event()
@@ -228,8 +266,10 @@ public class ChatController {
                     // CRITICAL: Always send complete event to finalize the message
                     long responseTime = System.currentTimeMillis() - startTime;
                     String completeData = String.format(
-                        "{\"tokensUsed\":0,\"processingTime\":%d,\"error\":true}",
-                        responseTime
+                        "{\"tokensUsed\":0,\"processingTime\":%d,\"error\":true,\"agentName\":\"%s\",\"panelId\":\"%s\"}",
+                        responseTime,
+                        requestAgentName,
+                        requestPanelId
                     );
                     emitter.send(SseEmitter.event()
                             .name("complete")
@@ -237,12 +277,14 @@ public class ChatController {
 
                     // Complete normally (not with error) since we handled it gracefully
                     emitter.complete();
-                    log.debug("Stream completed with error in {}ms", responseTime);
                 } catch (Exception sendError) {
-                    log.error("Error sending error message", sendError);
+                    log.error("Error sending error for Agent: {}, Panel: {}", requestAgentName, requestPanelId, sendError);
                     // Last resort - complete with error
                     emitter.completeWithError(e);
                 }
+            } finally {
+                // CRITICAL: Always clear thread-local context to prevent memory leaks
+                orchestrator.clearThreadAgentContext();
             }
         });
 
@@ -252,7 +294,7 @@ public class ChatController {
     @GetMapping("/history")
     public ResponseEntity<ApiResponse<List<ConversationMessage>>> getHistory() {
         try {
-            List<ConversationMessage> history = orchestrator.getConversationHistory();
+            List<ConversationMessage> history = orchestrator.getConversationHistoryCopy();
             return ResponseEntity.ok(ApiResponse.success(history));
         } catch (Exception e) {
             log.error("Error retrieving conversation history", e);

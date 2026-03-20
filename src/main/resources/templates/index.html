@@ -28,8 +28,8 @@
         <header class="app-header">
             <div class="header-content">
                 <h1 class="app-title">
-                    <img th:src="@{/images/logo.png}" alt="T1 Super AI" class="app-logo">
-                    T1 Super AI
+                    <img th:src="@{/images/logo-t1-head-beige-background.png}" alt="T1 Super AI" class="app-logo-head">
+                    <img th:src="@{/images/logo-t1-super-ai-text.png}" alt="T1 Super AI" class="app-logo-text">
                 </h1>
                 <div class="header-actions">
                     <button class="btn btn-secondary" onclick="showConfigModal()">
@@ -46,9 +46,11 @@
             <aside class="sidebar">
                 <div class="sidebar-header">
                     <h2>Agents</h2>
-                    <button class="btn btn-primary btn-sm" onclick="showCreateAgentModal()">
-                        <span class="icon">➕</span>
-                        New Agent
+                    <button class="btn-icon-small" onclick="showCreateAgentModal()" title="New Agent">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="12" y1="5" x2="12" y2="19"></line>
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                        </svg>
                     </button>
                 </div>
                 <agent-selector></agent-selector>

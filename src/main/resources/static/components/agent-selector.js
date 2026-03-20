@@ -103,10 +103,16 @@ class AgentSelector extends HTMLElement {
 
         listContainer.innerHTML = this.agents.map(agent => {
             const isActive = agent.name === this.currentAgent || agent.isCurrentAgent;
-            // Debug: log the actual status value
-            console.log(`Agent: ${agent.name}, Status: "${agent.status}", Type: ${typeof agent.status}`);
+            // Debug: log the actual status value and full agent object
+            console.log(`Agent: ${agent.name}, Full agent object:`, agent);
             const statusIcon = (agent.status && agent.status.toLowerCase() === 'active') ? '🟢' : '🔴';
             const colorClass = this.getAgentColorClass(agent.name);
+
+            // Get provider and model info
+            const provider = agent.provider || '';
+            const model = agent.model || '';
+            // Provider might be an enum string like "OPENAI" or null
+            const providerModelText = (provider && model) ? `${provider} / ${model}` : '';
 
             return `
                 <div class="agent-card ${isActive ? 'agent-active' : ''} ${colorClass}"
@@ -116,11 +122,24 @@ class AgentSelector extends HTMLElement {
                         <div class="agent-info">
                             <div class="agent-name">${agent.name}</div>
                             <div class="agent-role">${agent.role || 'No role specified'}</div>
+                            ${providerModelText ? `<div class="agent-provider-model">${providerModelText}</div>` : ''}
                         </div>
                         <div class="agent-controls">
                             <div class="agent-status-indicator">${statusIcon}</div>
-                            <button class="btn-icon-small" onclick="event.stopPropagation(); agentSelector.editAgent('${agent.name}')" title="Edit">✏️</button>
-                            <button class="btn-icon-small" onclick="event.stopPropagation(); agentSelector.deleteAgent('${agent.name}')" title="Delete">🗑️</button>
+                            <button class="btn-icon-small" onclick="event.stopPropagation(); agentSelector.editAgent('${agent.name}')" title="Edit">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                                </svg>
+                            </button>
+                            <button class="btn-icon-small" onclick="event.stopPropagation(); agentSelector.deleteAgent('${agent.name}')" title="Delete">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="3 6 5 6 21 6"></polyline>
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    <line x1="10" y1="11" x2="10" y2="17"></line>
+                                    <line x1="14" y1="11" x2="14" y2="17"></line>
+                                </svg>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -128,7 +147,40 @@ class AgentSelector extends HTMLElement {
         }).join('');
     }
 
+    updateAgentSelection(newAgent, oldAgent) {
+        // Fast DOM update - only toggle classes instead of re-rendering
+        const listContainer = this.querySelector('#agentList');
+
+        // Remove active class from old agent
+        if (oldAgent) {
+            const oldCard = listContainer.querySelector(`[data-agent="${oldAgent}"]`);
+            if (oldCard) {
+                oldCard.classList.remove('agent-active');
+            }
+        }
+
+        // Add active class to new agent
+        if (newAgent) {
+            const newCard = listContainer.querySelector(`[data-agent="${newAgent}"]`);
+            if (newCard) {
+                newCard.classList.add('agent-active');
+            }
+        }
+    }
+
     async selectAgent(agentName) {
+        // Store the previous agent in case we need to rollback
+        const previousAgent = this.currentAgent;
+
+        // Optimistically update UI immediately with fast DOM manipulation
+        this.currentAgent = agentName;
+        this.updateAgentSelection(agentName, previousAgent);
+
+        // Dispatch event for other components
+        window.dispatchEvent(new CustomEvent('agent-changed', {
+            detail: agentName
+        }));
+
         try {
             const response = await fetch('/api/v1/agents/current', {
                 method: 'PUT',
@@ -140,20 +192,24 @@ class AgentSelector extends HTMLElement {
             });
 
             if (response.ok) {
-                this.currentAgent = agentName;
-                this.renderAgents();
-
-                // Dispatch event for other components
-                window.dispatchEvent(new CustomEvent('agent-changed', {
-                    detail: agentName
-                }));
-
                 showToast(`Switched to agent: ${agentName}`);
             } else {
+                // Rollback on failure
+                this.currentAgent = previousAgent;
+                this.updateAgentSelection(previousAgent, agentName);
+                window.dispatchEvent(new CustomEvent('agent-changed', {
+                    detail: previousAgent
+                }));
                 showToast('Failed to switch agent', 'error');
             }
         } catch (error) {
             console.error('Failed to select agent:', error);
+            // Rollback on error
+            this.currentAgent = previousAgent;
+            this.updateAgentSelection(previousAgent, agentName);
+            window.dispatchEvent(new CustomEvent('agent-changed', {
+                detail: previousAgent
+            }));
             showToast('Failed to switch agent', 'error');
         }
     }

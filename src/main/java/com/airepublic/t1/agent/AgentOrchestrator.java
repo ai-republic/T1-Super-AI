@@ -63,18 +63,133 @@ public class AgentOrchestrator {
 
     private boolean autoModelSelectionEnabled = true; // Default enabled
 
-    // Thread-safe conversation history for concurrent request handling
-    private final List<ConversationMessage> conversationHistory = new CopyOnWriteArrayList<>();
     private static final int MAX_TOOL_ITERATIONS = 10;
-    private String sessionContext = null;
     private String currentModelInfo = null; // Store current model being used
+
+    // CRITICAL: ThreadLocal storage for complete agent isolation
+    // Each thread gets its own conversation history, session context, agent name, and panel ID
+    // This ensures complete isolation between concurrent agent requests
+    private static final ThreadLocal<List<ConversationMessage>> THREAD_CONVERSATION_HISTORY =
+        ThreadLocal.withInitial(CopyOnWriteArrayList::new);
+    private static final ThreadLocal<String> THREAD_SESSION_CONTEXT = new ThreadLocal<>();
+    private static final ThreadLocal<String> CURRENT_AGENT_CONTEXT = new ThreadLocal<>();
+    private static final ThreadLocal<String> CURRENT_PANEL_ID = new ThreadLocal<>();
+
+    // Fallback global storage for backward compatibility (used only when ThreadLocal is not set)
+    // This should rarely be used in normal operation
+    private final List<ConversationMessage> fallbackConversationHistory = new CopyOnWriteArrayList<>();
+    private String fallbackSessionContext = null;
+
+    /**
+     * Set the agent context for the current thread.
+     * This must be called before processing a message to ensure proper agent isolation.
+     * Initializes a fresh conversation history and loads the agent's session context.
+     */
+    public void setThreadAgentContext(String agentName, String panelId) {
+        CURRENT_AGENT_CONTEXT.set(agentName);
+        CURRENT_PANEL_ID.set(panelId);
+
+        // Initialize fresh conversation history for this thread
+        THREAD_CONVERSATION_HISTORY.get().clear();
+
+        // Load agent-specific session context
+        if (agentName != null) {
+            String sessionCtx = sessionContextManager.buildInitialContext(agentName);
+            THREAD_SESSION_CONTEXT.set(sessionCtx);
+            log.debug("Thread {} loaded session context for agent '{}'",
+                     Thread.currentThread().getName(), agentName);
+        } else {
+            String sessionCtx = sessionContextManager.buildInitialContext();
+            THREAD_SESSION_CONTEXT.set(sessionCtx);
+        }
+
+        log.info("🔧 Thread {} initialized context - Agent: {}, Panel: {}",
+                  Thread.currentThread().getName(), agentName, panelId);
+    }
+
+    /**
+     * Clear the agent context for the current thread.
+     * This should always be called in a finally block after processing.
+     * CRITICAL: Prevents memory leaks in thread pools.
+     */
+    public void clearThreadAgentContext() {
+        String agent = CURRENT_AGENT_CONTEXT.get();
+        String panel = CURRENT_PANEL_ID.get();
+
+        // Clear all thread-local storage
+        THREAD_CONVERSATION_HISTORY.remove();
+        THREAD_SESSION_CONTEXT.remove();
+        CURRENT_AGENT_CONTEXT.remove();
+        CURRENT_PANEL_ID.remove();
+
+        log.debug("🧹 Thread {} cleared context - Agent: {}, Panel: {}",
+                  Thread.currentThread().getName(), agent, panel);
+    }
+
+    /**
+     * Get the current thread's agent name
+     */
+    public String getCurrentThreadAgent() {
+        return CURRENT_AGENT_CONTEXT.get();
+    }
+
+    /**
+     * Get the current thread's panel ID
+     */
+    public String getCurrentThreadPanelId() {
+        return CURRENT_PANEL_ID.get();
+    }
+
+    /**
+     * Get the conversation history for the current thread.
+     * Returns thread-local history if available, otherwise fallback global history.
+     */
+    private List<ConversationMessage> getConversationHistory() {
+        // Use thread-local if agent context is set
+        if (CURRENT_AGENT_CONTEXT.get() != null) {
+            return THREAD_CONVERSATION_HISTORY.get();
+        }
+        // Fallback to global for backward compatibility
+        return fallbackConversationHistory;
+    }
+
+    /**
+     * Get the session context for the current thread.
+     * Returns thread-local context if available, otherwise fallback global context.
+     */
+    private String getSessionContext() {
+        // Use thread-local if agent context is set
+        if (CURRENT_AGENT_CONTEXT.get() != null) {
+            return THREAD_SESSION_CONTEXT.get();
+        }
+        // Fallback to global for backward compatibility
+        return fallbackSessionContext;
+    }
+
+    /**
+     * Set the session context for the current thread.
+     */
+    private void setSessionContext(String context) {
+        // Set thread-local if agent context is set
+        if (CURRENT_AGENT_CONTEXT.get() != null) {
+            THREAD_SESSION_CONTEXT.set(context);
+        } else {
+            // Fallback to global for backward compatibility
+            fallbackSessionContext = context;
+        }
+    }
 
     public String processMessage(final String userMessage) {
         return processMessage(userMessage, new ArrayList<>());
     }
 
     public String processMessage(final String userMessage, final List<MessageAttachment> attachments) {
-        log.info("🚀 Processing message with {} attachments", attachments != null ? attachments.size() : 0);
+        // Log with thread-specific agent context if available
+        String threadAgent = CURRENT_AGENT_CONTEXT.get();
+        String threadPanel = CURRENT_PANEL_ID.get();
+        log.info("🚀 Processing message - Thread: {}, Agent: {}, Panel: {}, Attachments: {}",
+                 Thread.currentThread().getName(), threadAgent, threadPanel,
+                 attachments != null ? attachments.size() : 0);
 
         // Add user message to history with attachments
         final ConversationMessage userMsg = ConversationMessage.builder()
@@ -83,7 +198,7 @@ public class AgentOrchestrator {
                 .timestamp(LocalDateTime.now())
                 .attachments(attachments != null ? attachments : new ArrayList<>())
                 .build();
-        conversationHistory.add(userMsg);
+        getConversationHistory().add(userMsg);
 
         try {
             // Get the appropriate chat client based on automatic model selection
@@ -107,7 +222,10 @@ public class AgentOrchestrator {
             log.info("✅ Conversation loop completed, response length: {}", finalResponse != null ? finalResponse.length() : 0);
 
             // Add assistant response to history
-            final String currentAgent = agentManager != null ? agentManager.getCurrentAgentName() : null;
+            // Use thread-local agent context if available, otherwise fall back to global
+            final String currentAgent = CURRENT_AGENT_CONTEXT.get() != null ?
+                CURRENT_AGENT_CONTEXT.get() :
+                (agentManager != null ? agentManager.getCurrentAgentName() : null);
             final ConversationMessage assistantMsg = ConversationMessage.builder()
                     .role("assistant")
                     .content(finalResponse)
@@ -115,7 +233,7 @@ public class AgentOrchestrator {
                     .timestamp(LocalDateTime.now())
                     .modelUsed(configManager.getCurrentModel())
                     .build();
-            conversationHistory.add(assistantMsg);
+            getConversationHistory().add(assistantMsg);
 
             // Store in vector memory if available
             if (memoryService != null) {
@@ -342,8 +460,10 @@ public class AgentOrchestrator {
                             }
                         }
 
-                        // Broadcast tool call to UI
-                        final String currentAgent = agentManager != null ? agentManager.getCurrentAgentName() : "default";
+                        // Broadcast tool call to UI - use thread-local agent context
+                        final String currentAgent = CURRENT_AGENT_CONTEXT.get() != null ?
+                            CURRENT_AGENT_CONTEXT.get() :
+                            (agentManager != null ? agentManager.getCurrentAgentName() : "default");
                         messageBroadcaster.broadcastToolCall(currentAgent, toolName, argsMap);
 
                         final long startTime = System.currentTimeMillis();
@@ -372,8 +492,10 @@ public class AgentOrchestrator {
                         final String errorMsg = "Error executing tool: " + e.getMessage();
                         formatter.printError(errorMsg);
 
-                        // Broadcast tool failure to UI
-                        final String currentAgent = agentManager != null ? agentManager.getCurrentAgentName() : "default";
+                        // Broadcast tool failure to UI - use thread-local agent context
+                        final String currentAgent = CURRENT_AGENT_CONTEXT.get() != null ?
+                            CURRENT_AGENT_CONTEXT.get() :
+                            (agentManager != null ? agentManager.getCurrentAgentName() : "default");
                         messageBroadcaster.broadcastToolResult(currentAgent, toolName, errorMsg, false, 0);
 
                         final ToolResponseMessage.ToolResponse toolResponse =
@@ -399,16 +521,24 @@ public class AgentOrchestrator {
     private List<Message> convertHistoryToMessages() {
         final List<Message> messages = new ArrayList<>();
 
-        // Load session context (USER.md and CHARACTER.md) on first message
-        if (sessionContext == null) {
-            // Get current agent name if available
-            final String currentAgent = agentManager != null ? agentManager.getCurrentAgentName() : null;
+        // Get session context (already loaded in setThreadAgentContext)
+        String sessionCtx = getSessionContext();
+
+        // Load session context if not already loaded (fallback for backward compatibility)
+        if (sessionCtx == null) {
+            // Get current agent name from thread-local context or global state
+            final String currentAgent = CURRENT_AGENT_CONTEXT.get() != null ?
+                CURRENT_AGENT_CONTEXT.get() :
+                (agentManager != null ? agentManager.getCurrentAgentName() : null);
             if (currentAgent != null) {
                 // Load agent-specific CHARACTER.md
-                sessionContext = sessionContextManager.buildInitialContext(currentAgent);
+                sessionCtx = sessionContextManager.buildInitialContext(currentAgent);
+                setSessionContext(sessionCtx);
+                log.debug("Loaded session context for agent: {}", currentAgent);
             } else {
                 // Fallback to loading only USER.md
-                sessionContext = sessionContextManager.buildInitialContext();
+                sessionCtx = sessionContextManager.buildInitialContext();
+                setSessionContext(sessionCtx);
             }
         }
 
@@ -416,8 +546,8 @@ public class AgentOrchestrator {
         final StringBuilder systemMessageBuilder = new StringBuilder();
 
         // Add extracted character profile (concise)
-        if (!sessionContext.isEmpty()) {
-            systemMessageBuilder.append(sessionContext);
+        if (sessionCtx != null && !sessionCtx.isEmpty()) {
+            systemMessageBuilder.append(sessionCtx);
         }
 
         // Add base instructions
@@ -431,8 +561,8 @@ public class AgentOrchestrator {
 
         messages.add(new UserMessage(systemMessageBuilder.toString()));
 
-        // Convert conversation history
-        for (final ConversationMessage msg : conversationHistory) {
+        // Convert conversation history (using thread-local or fallback)
+        for (final ConversationMessage msg : getConversationHistory()) {
             if ("user".equals(msg.getRole())) {
                 // Check if message has attachments
                 if (msg.getAttachments() != null && !msg.getAttachments().isEmpty()) {
@@ -498,12 +628,13 @@ public class AgentOrchestrator {
     }
 
     public void clearHistory() {
-        conversationHistory.clear();
+        getConversationHistory().clear();
         formatter.printSuccess("Conversation history cleared");
     }
 
     public void reloadSessionContext() {
-        sessionContext = sessionContextManager.buildInitialContext();
+        String sessionCtx = sessionContextManager.buildInitialContext();
+        setSessionContext(sessionCtx);
         log.info("🔄 Session context reloaded from USER.md and CHARACTER.md");
         formatter.printSuccess("Session context reloaded - CHARACTER and USAGE profiles refreshed");
     }
@@ -517,12 +648,15 @@ public class AgentOrchestrator {
             return;
         }
         // Load agent-specific CHARACTER.md and USER.md
-        sessionContext = sessionContextManager.buildInitialContext(agentName);
+        String sessionCtx = sessionContextManager.buildInitialContext(agentName);
+        setSessionContext(sessionCtx);
         log.info("🔄 Session context reloaded for agent '{}' from USER.md and CHARACTER.md", agentName);
         formatter.printSuccess("Session context reloaded for agent '" + agentName + "'");
     }
 
-    public List<ConversationMessage> getConversationHistory() {
-        return new ArrayList<>(conversationHistory);
+    public List<ConversationMessage> getConversationHistoryCopy() {
+        // Return a copy to prevent external modification
+        List<ConversationMessage> history = getConversationHistory();
+        return new ArrayList<>(history);
     }
 }

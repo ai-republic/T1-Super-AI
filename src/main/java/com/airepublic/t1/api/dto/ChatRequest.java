@@ -16,6 +16,7 @@ import java.util.List;
 public class ChatRequest {
     private String message;
     private String agentName; // Optional - specify which agent to use
+    private String panelId; // Unique identifier for the conversation panel/UI component
     private Boolean stream; // Whether to stream response
 
     // File attachments (e.g., images for vision analysis)
