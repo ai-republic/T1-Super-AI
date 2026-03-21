@@ -1,0 +1,696 @@
+package com.airepublic.t1.config;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Scanner;
+
+import org.springframework.stereotype.Component;
+
+// Removed unused InteractiveConfigCLI import
+import com.airepublic.t1.model.AgentConfiguration;
+import com.airepublic.t1.model.AgentConfiguration.LLMConfig;
+import com.airepublic.t1.model.AgentConfiguration.LLMProvider;
+import com.airepublic.t1.model.AgentConfiguration.MCPServerConfig;
+import com.airepublic.t1.model.AgentConfiguration.TaskModelConfig;
+import com.airepublic.t1.model.AgentConfiguration.TaskType;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+@Component
+public class AgentConfigurationManager {
+    // Use Paths.get() for cross-platform compatibility (Windows, Linux, macOS)
+    private static final Path CONFIG_PATH = Paths.get(System.getProperty("user.home"), ".t1-super-ai");
+    private static final String CONFIG_DIR = CONFIG_PATH.toString();
+    private static final String CONFIG_FILE = CONFIG_PATH.resolve("config.json").toString();
+    private final ObjectMapper objectMapper;
+    private AgentConfiguration configuration;
+
+    public AgentConfigurationManager() {
+        objectMapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+        loadConfiguration();
+    }
+
+    public boolean isConfigured() {
+        return configuration != null && configuration.getDefaultProvider() != null;
+    }
+
+    public AgentConfiguration getConfiguration() {
+        return configuration;
+    }
+
+    public void loadConfiguration() {
+        try {
+            final File configFile = new File(CONFIG_FILE);
+            if (configFile.exists()) {
+                configuration = objectMapper.readValue(configFile, AgentConfiguration.class);
+                log.info("Configuration loaded from {}", CONFIG_FILE);
+            } else {
+                configuration = new AgentConfiguration();
+            }
+        } catch (final IOException e) {
+            log.error("Error loading configuration", e);
+            configuration = new AgentConfiguration();
+        }
+    }
+
+    public void saveConfiguration() {
+        try {
+            final Path configDir = Paths.get(CONFIG_DIR);
+            if (!Files.exists(configDir)) {
+                Files.createDirectories(configDir);
+            }
+            objectMapper.writeValue(new File(CONFIG_FILE), configuration);
+            log.info("Configuration saved to {}", CONFIG_FILE);
+        } catch (final IOException e) {
+            log.error("Error saving configuration", e);
+        }
+    }
+
+    public void runConfigurationWizard() {
+        // Use Scanner-based wizard for configuration
+        final Scanner scanner = new Scanner(System.in);
+
+        System.out.println("\n╔════════════════════════════════════════════════════╗");
+        System.out.println("║  🤖 T1 Super AI Configuration Wizard 🛠️        ║");
+        System.out.println("╚════════════════════════════════════════════════════╝\n");
+
+        // LLM Provider Selection
+        System.out.println("🔧 Select your LLM providers (you can configure multiple):");
+        System.out.println("  Enter comma-separated numbers (e.g., '1,2' for OpenAI and Anthropic)");
+        System.out.println("  1. 🟢 OpenAI");
+        System.out.println("  2. 🟣 Anthropic");
+        System.out.println("  3. 🦙 Ollama");
+        System.out.println("  4. ⭐ All of the above");
+
+        final String providerInput = readNonEmptyString(scanner, "\n📝 Enter your choice (e.g., 1,2 or 4): ");
+
+        // Parse provider selection
+        boolean configureOpenAI = false;
+        boolean configureAnthropic = false;
+        boolean configureOllama = false;
+
+        if (providerInput.trim().equals("4")) {
+            // All providers
+            configureOpenAI = true;
+            configureAnthropic = true;
+            configureOllama = true;
+        } else {
+            // Parse comma-separated values
+            final String[] selections = providerInput.split(",");
+            for (final String sel : selections) {
+                try {
+                    final int choice = Integer.parseInt(sel.trim());
+                    switch (choice) {
+                        case 1: configureOpenAI = true; break;
+                        case 2: configureAnthropic = true; break;
+                        case 3: configureOllama = true; break;
+                        case 4:
+                            configureOpenAI = true;
+                            configureAnthropic = true;
+                            configureOllama = true;
+                            break;
+                        default:
+                            System.out.println("⚠️  Invalid choice: " + choice + " (ignored)");
+                    }
+                } catch (final NumberFormatException e) {
+                    System.out.println("⚠️  Invalid input: " + sel + " (ignored)");
+                }
+            }
+        }
+
+        if (!configureOpenAI && !configureAnthropic && !configureOllama) {
+            System.out.println("❌ No valid providers selected. Please run the wizard again.");
+            return;
+        }
+
+        System.out.println("\n✅ Selected providers:");
+        if (configureOpenAI) {
+            System.out.println("  • OpenAI");
+        }
+        if (configureAnthropic) {
+            System.out.println("  • Anthropic");
+        }
+        if (configureOllama) {
+            System.out.println("  • Ollama");
+        }
+
+        // Configure OpenAI
+        if (configureOpenAI) {
+            System.out.println("\n🟢 ─── OpenAI Configuration ───");
+            final String apiKey = readNonEmptyString(scanner, "🔑 Enter OpenAI API Key: ");
+            final String model = readStringWithDefault(scanner,
+                    "🎯 Enter model name (default: gpt-4o): ", "gpt-4o");
+
+            final LLMConfig openAIConfig = new LLMConfig();
+            openAIConfig.setApiKey(apiKey);
+            openAIConfig.setModel(model);
+            openAIConfig.setBaseUrl("https://api.openai.com/v1");
+            configuration.getLlmConfigs().put(LLMProvider.OPENAI, openAIConfig);
+            System.out.println("✅ OpenAI configured successfully!");
+        }
+
+        // Configure Anthropic
+        if (configureAnthropic) {
+            System.out.println("\n🟣 ─── Anthropic Configuration ───");
+            final String apiKey = readNonEmptyString(scanner, "🔑 Enter Anthropic API Key: ");
+            final String model = readStringWithDefault(scanner,
+                    "🎯 Enter model name (default: claude-3-5-sonnet-20241022): ",
+                    "claude-3-5-sonnet-20241022");
+
+            final LLMConfig anthropicConfig = new LLMConfig();
+            anthropicConfig.setApiKey(apiKey);
+            anthropicConfig.setModel(model);
+            anthropicConfig.setBaseUrl("https://api.anthropic.com");
+            configuration.getLlmConfigs().put(LLMProvider.ANTHROPIC, anthropicConfig);
+            System.out.println("✅ Anthropic configured successfully!");
+        }
+
+        // Configure Ollama
+        if (configureOllama) {
+            System.out.println("\n🦙 ─── Ollama Configuration ───");
+            final String baseUrl = readStringWithDefault(scanner,
+                    "🌐 Enter Ollama base URL (default: http://localhost:11434): ",
+                    "http://localhost:11434");
+            final String model = readStringWithDefault(scanner,
+                    "🎯 Enter model name (default: llama3.2): ", "llama3.2");
+
+            final LLMConfig ollamaConfig = new LLMConfig();
+            ollamaConfig.setBaseUrl(baseUrl);
+            ollamaConfig.setModel(model);
+            configuration.getLlmConfigs().put(LLMProvider.OLLAMA, ollamaConfig);
+            System.out.println("✅ Ollama configured successfully!");
+        }
+
+        // Set default provider
+        System.out.println("\n⭐ ─── Default Provider ───");
+        int providerIndex = 1;
+        if (configureOpenAI) {
+            System.out.println("  " + providerIndex++ + ". 🟢 OpenAI");
+        }
+        if (configureAnthropic) {
+            System.out.println("  " + providerIndex++ + ". 🟣 Anthropic");
+        }
+        if (configureOllama) {
+            System.out.println("  " + providerIndex++ + ". 🦙 Ollama");
+        }
+
+        final int maxChoice = providerIndex - 1;
+        final int defaultChoice = readIntWithValidation(scanner,
+                "📌 Select default provider (1-" + maxChoice + "): ", 1, maxChoice);
+
+        // Map choice to provider
+        int currentIndex = 1;
+        if (configureOpenAI && defaultChoice == currentIndex++) {
+            configuration.setDefaultProvider(LLMProvider.OPENAI);
+        } else if (configureAnthropic && defaultChoice == currentIndex++) {
+            configuration.setDefaultProvider(LLMProvider.ANTHROPIC);
+        } else if (configureOllama && defaultChoice == currentIndex) {
+            configuration.setDefaultProvider(LLMProvider.OLLAMA);
+        }
+        System.out.println("✅ Default provider set to: " + configuration.getDefaultProvider());
+
+        // Task-based Model Configuration
+        System.out.println("\n🎯 ─── Task-Specific Model Configuration ───");
+        System.out.println("Configure different models for different task types");
+        System.out.println("Organized by category for easier configuration\n");
+        final boolean configureTaskModels = readYesNo(scanner,
+                "💡 Do you want to configure task-specific models? (y/n, default: y): ", true);
+
+        if (configureTaskModels) {
+            // Group 1: Text & Reasoning Tasks
+            System.out.println("\n╔════════════════════════════════════════════════════╗");
+            System.out.println("║  📝 TEXT & REASONING TASKS                         ║");
+            System.out.println("╚════════════════════════════════════════════════════╝");
+            configureTaskType(scanner, TaskType.GENERAL_KNOWLEDGE, configureOpenAI, configureAnthropic, configureOllama);
+            configureTaskType(scanner, TaskType.CODING, configureOpenAI, configureAnthropic, configureOllama);
+
+            // Group 2: Audio Tasks
+            System.out.println("\n╔════════════════════════════════════════════════════╗");
+            System.out.println("║  🎤 AUDIO TASKS                                    ║");
+            System.out.println("╚════════════════════════════════════════════════════╝");
+            System.out.println("💡 Recommended: OpenAI Whisper for STT, ElevenLabs/OpenAI for TTS");
+            configureTaskType(scanner, TaskType.SPEECH_TO_TEXT, configureOpenAI, configureAnthropic, configureOllama);
+            configureTaskType(scanner, TaskType.TEXT_TO_SPEECH, configureOpenAI, configureAnthropic, configureOllama);
+
+            // Group 3: Image Tasks
+            System.out.println("\n╔════════════════════════════════════════════════════╗");
+            System.out.println("║  🖼️  IMAGE TASKS                                    ║");
+            System.out.println("╚════════════════════════════════════════════════════╝");
+            System.out.println("💡 Analysis: GPT-4 Vision, Claude 3.5; Generation: DALL-E, Stable Diffusion");
+            configureTaskType(scanner, TaskType.IMAGE_ANALYSIS, configureOpenAI, configureAnthropic, configureOllama);
+            configureTaskType(scanner, TaskType.IMAGE_GENERATION, configureOpenAI, configureAnthropic, configureOllama);
+
+            // Group 4: Video Tasks
+            System.out.println("\n╔════════════════════════════════════════════════════╗");
+            System.out.println("║  🎬 VIDEO TASKS                                    ║");
+            System.out.println("╚════════════════════════════════════════════════════╝");
+            System.out.println("💡 Analysis: GPT-4 Vision, Claude 3.5; Generation: Specialized video models");
+            configureTaskType(scanner, TaskType.VIDEO_ANALYSIS, configureOpenAI, configureAnthropic, configureOllama);
+            configureTaskType(scanner, TaskType.VIDEO_GENERATION, configureOpenAI, configureAnthropic, configureOllama);
+        }
+
+        // MCP Servers
+        System.out.println("\n🔌 ─── MCP Servers (Model Context Protocol) ───");
+        boolean configureMCP = readYesNo(scanner,
+                "💬 Do you want to configure MCP servers? (y/n): ", false);
+
+        while (configureMCP) {
+            final MCPServerConfig mcpConfig = new MCPServerConfig();
+
+            final String name = readNonEmptyString(scanner, "📛 Enter MCP server name: ");
+            mcpConfig.setName(name);
+
+            final String transport = readStringWithValidation(scanner,
+                    "🚀 Enter transport type (stdio/http): ",
+                    new String[]{"stdio", "http"});
+            mcpConfig.setTransport(transport);
+
+            if ("stdio".equalsIgnoreCase(transport)) {
+                final String command = readNonEmptyString(scanner, "⚙️  Enter command to start server: ");
+                mcpConfig.setCommand(command);
+            } else {
+                final String url = readNonEmptyString(scanner, "🌐 Enter server URL: ");
+                mcpConfig.setUrl(url);
+            }
+
+            configuration.getMcpServers().add(mcpConfig);
+            System.out.println("✅ MCP server '" + name + "' added!");
+
+            configureMCP = readYesNo(scanner, "➕ Add another MCP server? (y/n): ", false);
+        }
+
+        // System Settings
+        System.out.println("\n🔒 ─── System Settings ───");
+
+        final boolean enableFS = readYesNo(scanner,
+                "📁 Enable file system access? (y/n, default: y): ", true);
+        configuration.getSystemSettings().setEnableFileSystem(enableFS);
+
+        final boolean enableWeb = readYesNo(scanner,
+                "🌐 Enable web access? (y/n, default: y): ", true);
+        configuration.getSystemSettings().setEnableWebAccess(enableWeb);
+
+        final boolean enableBash = readYesNo(scanner,
+                "💻 Enable bash execution? (y/n, default: y): ", true);
+        configuration.getSystemSettings().setEnableBashExecution(enableBash);
+
+        saveConfiguration();
+
+        System.out.println("\n╔════════════════════════════════════════════════════╗");
+        System.out.println("║  ✅ Configuration Complete!                        ║");
+        System.out.println("╚════════════════════════════════════════════════════╝");
+        System.out.println("📂 Configuration saved to: " + CONFIG_FILE);
+        System.out.println("💡 You can manually edit this file or run /config again.\n");
+    }
+
+    // ========== Task Configuration Helper Method ==========
+
+    private void configureTaskType(final Scanner scanner, final TaskType taskType,
+            final boolean configureOpenAI, final boolean configureAnthropic, final boolean configureOllama) {
+        System.out.println("\n📋 " + taskType.getDisplayName() + " - " + taskType.getDescription());
+
+        // Show available providers
+        int providerIdx = 1;
+        System.out.println("Available providers:");
+        if (configureOpenAI) {
+            System.out.println("  " + providerIdx++ + ". 🟢 OpenAI");
+        }
+        if (configureAnthropic) {
+            System.out.println("  " + providerIdx++ + ". 🟣 Anthropic");
+        }
+        if (configureOllama) {
+            System.out.println("  " + providerIdx++ + ". 🦙 Ollama");
+        }
+        System.out.println("  " + providerIdx + ". ⏭️  Skip (use default provider)");
+
+        final int maxProviderChoice = providerIdx;
+        final int providerChoice = readIntWithValidation(scanner,
+                "🔧 Select provider for " + taskType.getDisplayName() + " (1-" + maxProviderChoice + "): ",
+                1, maxProviderChoice);
+
+        // Skip if user chooses to use default
+        if (providerChoice == maxProviderChoice) {
+            System.out.println("⏭️  Skipping - will use default provider for " + taskType.getDisplayName());
+            return;
+        }
+
+        // Map choice to provider
+        LLMProvider selectedProvider = null;
+        int currentIdx = 1;
+        if (configureOpenAI && providerChoice == currentIdx++) {
+            selectedProvider = LLMProvider.OPENAI;
+        } else if (configureAnthropic && providerChoice == currentIdx++) {
+            selectedProvider = LLMProvider.ANTHROPIC;
+        } else if (configureOllama && providerChoice == currentIdx) {
+            selectedProvider = LLMProvider.OLLAMA;
+        }
+
+        if (selectedProvider != null) {
+            final LLMConfig llmConfig = configuration.getLlmConfigs().get(selectedProvider);
+            final String defaultModel = llmConfig != null ? llmConfig.getModel() : "";
+
+            // Provide model suggestions based on task type
+            final String modelSuggestion = getModelSuggestion(taskType, selectedProvider);
+            if (!modelSuggestion.isEmpty()) {
+                System.out.println("💡 Suggested model: " + modelSuggestion);
+            }
+
+            final String model = readStringWithDefault(scanner,
+                    "🎯 Enter model name (default: " + defaultModel + "): ", defaultModel);
+
+            final TaskModelConfig taskConfig = new TaskModelConfig(selectedProvider, model);
+            configuration.getTaskModels().put(taskType, taskConfig);
+            System.out.println("✅ " + taskType.getDisplayName() + " configured with " +
+                    selectedProvider + " - " + model);
+        }
+    }
+
+    private String getModelSuggestion(final TaskType taskType, final LLMProvider provider) {
+        return switch (taskType) {
+            case SPEECH_TO_TEXT -> switch (provider) {
+                case OPENAI -> "whisper-1";
+                default -> "";
+            };
+            case TEXT_TO_SPEECH -> switch (provider) {
+                case OPENAI -> "tts-1 or tts-1-hd";
+                default -> "";
+            };
+            case IMAGE_ANALYSIS -> switch (provider) {
+                case OPENAI -> "gpt-4o or gpt-4-vision-preview";
+                case ANTHROPIC -> "claude-3-5-sonnet-20241022";
+                default -> "";
+            };
+            case IMAGE_GENERATION -> switch (provider) {
+                case OPENAI -> "dall-e-3";
+                default -> "";
+            };
+            case VIDEO_ANALYSIS -> switch (provider) {
+                case OPENAI -> "gpt-4o";
+                case ANTHROPIC -> "claude-3-5-sonnet-20241022";
+                default -> "";
+            };
+            case CODING -> switch (provider) {
+                case OPENAI -> "gpt-4o or o1-preview";
+                case ANTHROPIC -> "claude-3-5-sonnet-20241022";
+                case OLLAMA -> "codellama or deepseek-coder";
+            };
+            default -> "";
+        };
+    }
+
+    // ========== Validation Helper Methods ==========
+
+    private int readIntWithValidation(final Scanner scanner, final String prompt, final int min, final int max) {
+        while (true) {
+            System.out.print(prompt);
+            try {
+                final String input = scanner.nextLine().trim();
+                final int value = Integer.parseInt(input);
+                if (value >= min && value <= max) {
+                    return value;
+                }
+                System.out.println("❌ Please enter a number between " + min + " and " + max);
+            } catch (final NumberFormatException e) {
+                System.out.println("❌ Invalid input. Please enter a number between " + min + " and " + max);
+            }
+        }
+    }
+
+    private String readNonEmptyString(final Scanner scanner, final String prompt) {
+        while (true) {
+            System.out.print(prompt);
+            final String input = scanner.nextLine().trim();
+            if (!input.isEmpty()) {
+                return input;
+            }
+            System.out.println("❌ This field cannot be empty. Please try again.");
+        }
+    }
+
+    private String readStringWithDefault(final Scanner scanner, final String prompt, final String defaultValue) {
+        System.out.print(prompt);
+        final String input = scanner.nextLine().trim();
+        return input.isEmpty() ? defaultValue : input;
+    }
+
+    private String readStringWithValidation(final Scanner scanner, final String prompt, final String[] validValues) {
+        while (true) {
+            System.out.print(prompt);
+            final String input = scanner.nextLine().trim().toLowerCase();
+            for (final String valid : validValues) {
+                if (valid.equalsIgnoreCase(input)) {
+                    return input;
+                }
+            }
+            System.out.println("❌ Invalid input. Valid options: " + String.join(", ", validValues));
+        }
+    }
+
+    private boolean readYesNo(final Scanner scanner, final String prompt, final boolean defaultValue) {
+        while (true) {
+            System.out.print(prompt);
+            final String input = scanner.nextLine().trim().toLowerCase();
+
+            if (input.isEmpty()) {
+                return defaultValue;
+            }
+
+            if (input.equals("y") || input.equals("yes")) {
+                return true;
+            } else if (input.equals("n") || input.equals("no")) {
+                return false;
+            }
+
+            System.out.println("❌ Please enter 'y' for yes or 'n' for no");
+        }
+    }
+
+    public void updateProvider(final LLMProvider provider) {
+        configuration.setDefaultProvider(provider);
+        saveConfiguration();
+    }
+
+    public void updateModel(final String model) {
+        final LLMProvider currentProvider = configuration.getDefaultProvider();
+        final LLMConfig llmConfig = configuration.getLlmConfigs().get(currentProvider);
+
+        if (llmConfig == null) {
+            throw new IllegalStateException("Current provider " + currentProvider + " is not configured");
+        }
+
+        llmConfig.setModel(model);
+        saveConfiguration();
+    }
+
+    public String getCurrentModel() {
+        final LLMProvider currentProvider = configuration.getDefaultProvider();
+        final LLMConfig llmConfig = configuration.getLlmConfigs().get(currentProvider);
+
+        if (llmConfig == null) {
+            return "No model configured";
+        }
+
+        return llmConfig.getModel();
+    }
+
+    /**
+     * Configure task-specific model selection wizard
+     */
+    public void runTaskModelConfigurationWizard() {
+        final Scanner scanner = new Scanner(System.in);
+
+        System.out.println("\n╔════════════════════════════════════════════════════╗");
+        System.out.println("║  🎯 Task-Specific Model Configuration             ║");
+        System.out.println("╚════════════════════════════════════════════════════╝\n");
+
+        System.out.println("Configure different models for different task types.");
+        System.out.println("This allows automatic model selection based on your prompt.\n");
+
+        // Check if any providers are configured
+        if (configuration.getLlmConfigs().isEmpty()) {
+            System.out.println("❌ No LLM providers configured!");
+            System.out.println("   Please run /config first to configure providers.");
+            return;
+        }
+
+        // Show which providers are configured
+        System.out.println("✅ Configured providers:");
+        configuration.getLlmConfigs().keySet().forEach(provider ->
+                System.out.println("  • " + provider));
+        System.out.println();
+
+        // Ask if user wants to configure task models
+        final boolean configureTasks = readYesNo(scanner,
+                "💡 Configure task-specific models? (y/n, default: y): ", true);
+
+        if (!configureTasks) {
+            System.out.println("⏭️  Skipping task-specific model configuration.");
+            return;
+        }
+
+        // Configure each task type
+        System.out.println("\n📋 Configuring task-specific models...\n");
+
+        // Group 1: Text & Reasoning Tasks
+        System.out.println("╔════════════════════════════════════════════════════╗");
+        System.out.println("║  📝 TEXT & REASONING TASKS                         ║");
+        System.out.println("╚════════════════════════════════════════════════════╝");
+        configureTaskTypeInteractive(scanner, TaskType.GENERAL_KNOWLEDGE);
+        configureTaskTypeInteractive(scanner, TaskType.CODING);
+
+        // Group 2: Audio Tasks
+        System.out.println("\n╔════════════════════════════════════════════════════╗");
+        System.out.println("║  🎤 AUDIO TASKS                                    ║");
+        System.out.println("╚════════════════════════════════════════════════════╝");
+        System.out.println("💡 Recommended: OpenAI Whisper for STT");
+        configureTaskTypeInteractive(scanner, TaskType.SPEECH_TO_TEXT);
+        configureTaskTypeInteractive(scanner, TaskType.TEXT_TO_SPEECH);
+
+        // Group 3: Image Tasks
+        System.out.println("\n╔════════════════════════════════════════════════════╗");
+        System.out.println("║  🖼️  IMAGE TASKS                                    ║");
+        System.out.println("╚════════════════════════════════════════════════════╝");
+        System.out.println("💡 Analysis: GPT-4 Vision, Claude 3.5; Generation: DALL-E");
+        configureTaskTypeInteractive(scanner, TaskType.IMAGE_ANALYSIS);
+        configureTaskTypeInteractive(scanner, TaskType.IMAGE_GENERATION);
+
+        // Group 4: Video Tasks
+        System.out.println("\n╔════════════════════════════════════════════════════╗");
+        System.out.println("║  🎬 VIDEO TASKS                                    ║");
+        System.out.println("╚════════════════════════════════════════════════════╝");
+        configureTaskTypeInteractive(scanner, TaskType.VIDEO_ANALYSIS);
+        configureTaskTypeInteractive(scanner, TaskType.VIDEO_GENERATION);
+
+        // Save configuration
+        saveConfiguration();
+
+        System.out.println("\n╔════════════════════════════════════════════════════╗");
+        System.out.println("║  ✅ Task-Specific Models Configured!               ║");
+        System.out.println("╚════════════════════════════════════════════════════╝");
+        System.out.println("📂 Configuration saved to: " + CONFIG_FILE);
+        System.out.println("💡 Use /auto-model on to enable automatic model selection.\n");
+    }
+
+    /**
+     * Interactive configuration for a single task type
+     */
+    private void configureTaskTypeInteractive(final Scanner scanner, final TaskType taskType) {
+        System.out.println("\n📋 " + taskType.getDisplayName() + " - " + taskType.getDescription());
+
+        // Show existing configuration if any
+        final TaskModelConfig existingConfig = configuration.getTaskModels().get(taskType);
+        if (existingConfig != null) {
+            System.out.println("   Current: " + existingConfig.getProvider() + " / " + existingConfig.getModel());
+        }
+
+        // Get list of configured providers
+        final java.util.List<LLMProvider> providers = new java.util.ArrayList<>(configuration.getLlmConfigs().keySet());
+
+        // Show available providers
+        int providerIdx = 1;
+        System.out.println("Available providers:");
+        for (final LLMProvider provider : providers) {
+            System.out.println("  " + providerIdx++ + ". " + getProviderIcon(provider) + " " + provider);
+        }
+        System.out.println("  " + providerIdx + ". ⏭️  Skip (use default provider)");
+
+        final int maxProviderChoice = providerIdx;
+        final int providerChoice = readIntWithValidation(scanner,
+                "🔧 Select provider for " + taskType.getDisplayName() + " (1-" + maxProviderChoice + "): ",
+                1, maxProviderChoice);
+
+        // Skip if user chooses to use default
+        if (providerChoice == maxProviderChoice) {
+            System.out.println("⏭️  Skipping - will use default provider for " + taskType.getDisplayName());
+            // Remove existing config if any
+            configuration.getTaskModels().remove(taskType);
+            return;
+        }
+
+        // Get selected provider
+        final LLMProvider selectedProvider = providers.get(providerChoice - 1);
+        final LLMConfig llmConfig = configuration.getLlmConfigs().get(selectedProvider);
+        final String defaultModel = llmConfig != null ? llmConfig.getModel() : "";
+
+        // Provide model suggestions
+        final String modelSuggestion = getModelSuggestion(taskType, selectedProvider);
+        if (!modelSuggestion.isEmpty()) {
+            System.out.println("💡 Suggested model: " + modelSuggestion);
+        }
+
+        final String model = readStringWithDefault(scanner,
+                "🎯 Enter model name (default: " + defaultModel + "): ", defaultModel);
+
+        // Save configuration
+        final TaskModelConfig taskConfig = new TaskModelConfig(selectedProvider, model);
+        configuration.getTaskModels().put(taskType, taskConfig);
+        System.out.println("✅ " + taskType.getDisplayName() + " configured with " +
+                selectedProvider + " - " + model);
+    }
+
+    /**
+     * Update a specific task model configuration
+     */
+    public void updateTaskModel(final TaskType taskType, final LLMProvider provider, final String model) {
+        // Validate provider is configured
+        if (!configuration.getLlmConfigs().containsKey(provider)) {
+            throw new IllegalArgumentException("Provider " + provider + " is not configured. Configure it first.");
+        }
+
+        final TaskModelConfig taskConfig = new TaskModelConfig(provider, model);
+        configuration.getTaskModels().put(taskType, taskConfig);
+        saveConfiguration();
+    }
+
+    /**
+     * Remove a task-specific model configuration
+     */
+    public void removeTaskModel(final TaskType taskType) {
+        configuration.getTaskModels().remove(taskType);
+        saveConfiguration();
+    }
+
+    /**
+     * List all configured task-specific models
+     */
+    public void listTaskModels() {
+        if (configuration.getTaskModels().isEmpty()) {
+            System.out.println("No task-specific models configured.");
+            System.out.println("All tasks will use the default provider: " + configuration.getDefaultProvider());
+            return;
+        }
+
+        System.out.println("\n🎯 Task-Specific Models:");
+        System.out.println("─".repeat(60));
+
+        for (final TaskType taskType : TaskType.values()) {
+            final TaskModelConfig taskConfig = configuration.getTaskModels().get(taskType);
+            if (taskConfig != null) {
+                System.out.println(String.format("%-25s %s / %s",
+                        taskType.getDisplayName() + ":",
+                        taskConfig.getProvider(),
+                        taskConfig.getModel()));
+            }
+        }
+
+        System.out.println("─".repeat(60));
+        System.out.println("\nℹ️  Other tasks use default provider: " + configuration.getDefaultProvider());
+    }
+
+    /**
+     * Get provider icon for CLI display
+     */
+    private String getProviderIcon(final LLMProvider provider) {
+        return switch (provider) {
+            case OPENAI -> "🟢";
+            case ANTHROPIC -> "🟣";
+            case OLLAMA -> "🦙";
+        };
+    }
+}
