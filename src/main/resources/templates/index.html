@@ -44,6 +44,7 @@
         <div class="main-content">
             <!-- Sidebar -->
             <aside class="sidebar">
+                <team-selector></team-selector>
                 <div class="sidebar-header">
                     <h2>Agents</h2>
                     <button class="btn-icon-small" onclick="showCreateAgentModal()" title="New Agent">
@@ -102,6 +103,7 @@
     <!-- Web Components -->
     <script type="module" th:src="@{/components/agent-config-form.js}"></script>
     <script type="module" th:src="@{/components/chat-component.js}"></script>
+    <script type="module" th:src="@{/components/team-selector.js}"></script>
     <script type="module" th:src="@{/components/agent-selector.js}"></script>
     <script type="module" th:src="@{/components/config-editor.js}"></script>
     <script type="module" th:src="@{/components/character-editor.js}"></script>

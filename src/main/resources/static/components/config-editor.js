@@ -26,22 +26,93 @@ class ConfigEditor extends HTMLElement {
                 <div class="loading" id="configLoading">Loading configuration...</div>
                 <form id="configForm" style="display: none;">
                     <div class="form-section">
+                        <h3>Provider Configuration</h3>
+                        <div class="info-box" style="margin-bottom: 1rem;">
+                            <strong>💡 Configure your AI providers</strong>
+                            <p style="margin: 0.5rem 0 0; font-size: 0.875rem;">
+                                Set up API keys and models for each provider you want to use. Ollama doesn't require an API key.
+                            </p>
+                        </div>
+
+                        <!-- OpenAI Configuration -->
+                        <div class="provider-config-section">
+                            <h4>🟢 OpenAI</h4>
+                            <div class="form-group">
+                                <label for="openaiApiKey">API Key</label>
+                                <input type="password" id="openaiApiKey" class="form-control"
+                                    placeholder="sk-...">
+                                <small class="form-help">Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com/api-keys</a></small>
+                            </div>
+                            <div class="form-group">
+                                <label for="openaiModel">Model</label>
+                                <input type="text" id="openaiModel" class="form-control"
+                                    placeholder="e.g., gpt-4o, gpt-4, gpt-3.5-turbo">
+                                <small class="form-help">Leave empty to use default model</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="openaiBaseUrl">Base URL</label>
+                                <input type="text" id="openaiBaseUrl" class="form-control"
+                                    placeholder="https://api.openai.com/v1">
+                                <small class="form-help">Leave empty to use default OpenAI URL</small>
+                            </div>
+                        </div>
+
+                        <!-- Anthropic Configuration -->
+                        <div class="provider-config-section">
+                            <h4>🟣 Anthropic (Claude)</h4>
+                            <div class="form-group">
+                                <label for="anthropicApiKey">API Key</label>
+                                <input type="password" id="anthropicApiKey" class="form-control"
+                                    placeholder="sk-ant-...">
+                                <small class="form-help">Get your API key from <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com/settings/keys</a></small>
+                            </div>
+                            <div class="form-group">
+                                <label for="anthropicModel">Model</label>
+                                <input type="text" id="anthropicModel" class="form-control"
+                                    placeholder="e.g., claude-3-5-sonnet-20241022, claude-3-opus-20240229">
+                                <small class="form-help">Leave empty to use default model</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="anthropicBaseUrl">Base URL</label>
+                                <input type="text" id="anthropicBaseUrl" class="form-control"
+                                    placeholder="https://api.anthropic.com">
+                                <small class="form-help">Leave empty to use default Anthropic URL</small>
+                            </div>
+                        </div>
+
+                        <!-- Ollama Configuration -->
+                        <div class="provider-config-section">
+                            <h4>🦙 Ollama (Local Models)</h4>
+                            <div class="info-box info-box-tip" style="margin-bottom: 1rem;">
+                                <strong>No API key needed!</strong> Ollama runs locally on your machine.
+                                Download from <a href="https://ollama.ai" target="_blank">ollama.ai</a>
+                            </div>
+                            <div class="form-group">
+                                <label for="ollamaModel">Model</label>
+                                <input type="text" id="ollamaModel" class="form-control"
+                                    placeholder="e.g., llama3.2, codellama, mistral">
+                                <small class="form-help">Leave empty to use default model</small>
+                            </div>
+                            <div class="form-group">
+                                <label for="ollamaBaseUrl">Base URL</label>
+                                <input type="text" id="ollamaBaseUrl" class="form-control"
+                                    placeholder="http://localhost:11434">
+                                <small class="form-help">URL where Ollama is running</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-section">
                         <h3>Default Provider</h3>
                         <div class="form-group">
                             <label for="defaultProvider">Provider</label>
                             <select id="defaultProvider" class="form-control" required>
                                 <option value="">Select Provider</option>
-                                <option value="OPENAI">OpenAI</option>
-                                <option value="ANTHROPIC">Anthropic</option>
-                                <option value="OLLAMA">Ollama</option>
+                                <option value="OPENAI">🟢 OpenAI</option>
+                                <option value="ANTHROPIC">🟣 Anthropic</option>
+                                <option value="OLLAMA">🦙 Ollama</option>
                             </select>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="defaultModel">Default Model</label>
-                            <input type="text" id="defaultModel" class="form-control" required
-                                placeholder="e.g., gpt-4o, claude-3-5-sonnet-20241022">
-                            <small class="form-help">Enter the model name for the selected provider</small>
+                            <small class="form-help">This provider will be used by default for all tasks</small>
                         </div>
                     </div>
 
@@ -138,16 +209,64 @@ class ConfigEditor extends HTMLElement {
         if (!this.config) return;
 
         const providerSelect = this.querySelector('#defaultProvider');
-        const defaultModelInput = this.querySelector('#defaultModel');
 
         // Set default provider
         if (this.config.defaultProvider) {
             providerSelect.value = this.config.defaultProvider;
         }
 
-        // Set current model
-        if (this.config.currentModel) {
-            defaultModelInput.value = this.config.currentModel;
+        // Populate provider configurations
+        if (this.config.llmConfigs) {
+            // OpenAI
+            if (this.config.llmConfigs.OPENAI) {
+                const openaiConfig = this.config.llmConfigs.OPENAI;
+                const apiKeyInput = this.querySelector('#openaiApiKey');
+                const modelInput = this.querySelector('#openaiModel');
+                const baseUrlInput = this.querySelector('#openaiBaseUrl');
+
+                // Show placeholder for API key if it exists (don't display actual key)
+                if (apiKeyInput && openaiConfig.hasApiKey) {
+                    apiKeyInput.placeholder = '••••••••••••••••••••';
+                }
+                if (modelInput && openaiConfig.model) {
+                    modelInput.value = openaiConfig.model;
+                }
+                if (baseUrlInput && openaiConfig.baseUrl) {
+                    baseUrlInput.value = openaiConfig.baseUrl;
+                }
+            }
+
+            // Anthropic
+            if (this.config.llmConfigs.ANTHROPIC) {
+                const anthropicConfig = this.config.llmConfigs.ANTHROPIC;
+                const apiKeyInput = this.querySelector('#anthropicApiKey');
+                const modelInput = this.querySelector('#anthropicModel');
+                const baseUrlInput = this.querySelector('#anthropicBaseUrl');
+
+                if (apiKeyInput && anthropicConfig.hasApiKey) {
+                    apiKeyInput.placeholder = '••••••••••••••••••••';
+                }
+                if (modelInput && anthropicConfig.model) {
+                    modelInput.value = anthropicConfig.model;
+                }
+                if (baseUrlInput && anthropicConfig.baseUrl) {
+                    baseUrlInput.value = anthropicConfig.baseUrl;
+                }
+            }
+
+            // Ollama
+            if (this.config.llmConfigs.OLLAMA) {
+                const ollamaConfig = this.config.llmConfigs.OLLAMA;
+                const modelInput = this.querySelector('#ollamaModel');
+                const baseUrlInput = this.querySelector('#ollamaBaseUrl');
+
+                if (modelInput && ollamaConfig.model) {
+                    modelInput.value = ollamaConfig.model;
+                }
+                if (baseUrlInput && ollamaConfig.baseUrl) {
+                    baseUrlInput.value = ollamaConfig.baseUrl;
+                }
+            }
         }
 
         // Set auto model selection checkbox
@@ -264,15 +383,67 @@ class ConfigEditor extends HTMLElement {
 
     async saveConfiguration() {
         const provider = this.querySelector('#defaultProvider').value;
-        const model = this.querySelector('#defaultModel').value;
         const useAutoModel = this.querySelector('#useAutoModelSelection').checked;
 
-        if (!provider || !model) {
-            showToast('Please select both provider and model', 'error');
+        if (!provider) {
+            showToast('Please select a default provider', 'error');
             return;
         }
 
         try {
+            // Collect provider configurations
+            const providerConfigs = {};
+
+            // OpenAI config
+            const openaiApiKey = this.querySelector('#openaiApiKey').value.trim();
+            const openaiModel = this.querySelector('#openaiModel').value.trim();
+            const openaiBaseUrl = this.querySelector('#openaiBaseUrl').value.trim();
+            if (openaiApiKey || openaiModel || openaiBaseUrl) {
+                providerConfigs.OPENAI = {
+                    apiKey: openaiApiKey || undefined,
+                    model: openaiModel || undefined,
+                    baseUrl: openaiBaseUrl || undefined
+                };
+            }
+
+            // Anthropic config
+            const anthropicApiKey = this.querySelector('#anthropicApiKey').value.trim();
+            const anthropicModel = this.querySelector('#anthropicModel').value.trim();
+            const anthropicBaseUrl = this.querySelector('#anthropicBaseUrl').value.trim();
+            if (anthropicApiKey || anthropicModel || anthropicBaseUrl) {
+                providerConfigs.ANTHROPIC = {
+                    apiKey: anthropicApiKey || undefined,
+                    model: anthropicModel || undefined,
+                    baseUrl: anthropicBaseUrl || undefined
+                };
+            }
+
+            // Ollama config (no API key)
+            const ollamaModel = this.querySelector('#ollamaModel').value.trim();
+            const ollamaBaseUrl = this.querySelector('#ollamaBaseUrl').value.trim();
+            if (ollamaModel || ollamaBaseUrl) {
+                providerConfigs.OLLAMA = {
+                    model: ollamaModel || undefined,
+                    baseUrl: ollamaBaseUrl || undefined
+                };
+            }
+
+            // Update provider configurations
+            if (Object.keys(providerConfigs).length > 0) {
+                let response = await fetch('/api/v1/config/providers', {
+                    method: 'PUT',
+                    headers: {
+                        ...getAuthHeaders(),
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ providers: providerConfigs })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to update provider configurations');
+                }
+            }
+
             // Update default provider
             let response = await fetch('/api/v1/config/provider', {
                 method: 'PUT',
@@ -284,21 +455,7 @@ class ConfigEditor extends HTMLElement {
             });
 
             if (!response.ok) {
-                throw new Error('Failed to update provider');
-            }
-
-            // Update default model
-            response = await fetch('/api/v1/config/model', {
-                method: 'PUT',
-                headers: {
-                    ...getAuthHeaders(),
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ model })
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to update model');
+                throw new Error('Failed to update default provider');
             }
 
             // Update auto model selection if changed

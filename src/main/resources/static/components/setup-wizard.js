@@ -41,6 +41,9 @@ class SetupWizard extends HTMLElement {
             userPronouns: 'they/them',
             userWorkFocus: 'Software Development',
 
+            // Team data
+            teamName: '',
+
             // Agent data
             agentName: '',
             agentRole: 'AI Assistant',
@@ -540,12 +543,31 @@ class SetupWizard extends HTMLElement {
     getAgentConfigStep() {
         return `
             <div class="wizard-step" id="step3">
-                <h2>🤖 Configure Your First Agent</h2>
+                <h2>👥 Set up your first team</h2>
                 <p class="step-description">
-                    Let's create your first AI agent. You can customize its personality and purpose.
+                    Configure your team workspace and create your first AI agent.
                 </p>
 
-                <agent-config-form mode="create" id="wizardAgentConfig"></agent-config-form>
+                <div class="form-group">
+                    <label for="teamName" class="form-label">
+                        Team Name
+                    </label>
+                    <input
+                        type="text"
+                        id="teamName"
+                        class="form-input"
+                        placeholder="e.g., DevOps, Frontend, DataScience (leave empty for 'Default')"
+                        value="${this.formData.teamName}"
+                    >
+                    <small class="form-hint">
+                        Your workspace will be created at: <code>~/t1-super-ai/workspaces/<span id="teamNamePreview">${this.formData.teamName || 'Default'}</span>/</code>
+                    </small>
+                </div>
+
+                <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--border-color);">
+                    <h3 style="margin-bottom: 16px;">🤖 Configure Your First Agent</h3>
+                    <agent-config-form mode="create" id="wizardAgentConfig"></agent-config-form>
+                </div>
             </div>
         `;
     }
@@ -852,6 +874,9 @@ class SetupWizard extends HTMLElement {
                 break;
 
             case 4:
+                // Save team name
+                this.formData.teamName = document.getElementById('teamName')?.value?.trim() || '';
+
                 // Get data from the agent-config-form component
                 const configForm = document.getElementById('wizardAgentConfig');
                 if (configForm) {
@@ -868,6 +893,7 @@ class SetupWizard extends HTMLElement {
                 }
 
                 console.log('Saved step 4 data:', {
+                    teamName: this.formData.teamName,
                     agentName: this.formData.agentName,
                     agentRole: this.formData.agentRole,
                     agentPurpose: this.formData.agentPurpose,
@@ -943,6 +969,17 @@ class SetupWizard extends HTMLElement {
         } else if (this.currentStep === 4) {
             // Populate agent config form with saved data
             this.populateAgentConfigForm();
+
+            // Add event listener for team name preview
+            const teamNameInput = document.getElementById('teamName');
+            if (teamNameInput) {
+                teamNameInput.addEventListener('input', (e) => {
+                    const preview = document.getElementById('teamNamePreview');
+                    if (preview) {
+                        preview.textContent = e.target.value.trim() || 'Default';
+                    }
+                });
+            }
         }
     }
 
