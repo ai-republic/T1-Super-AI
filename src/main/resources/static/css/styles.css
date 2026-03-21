@@ -109,14 +109,14 @@ body {
 }
 
 .app-logo-head {
-    height: 36px;
+    height: 44px;
     width: auto;
     flex-shrink: 0;
     opacity: 0.95;
 }
 
 .app-logo-text {
-    height: 20px;
+    height: 28px;
     width: auto;
     flex-shrink: 0;
     opacity: 0.95;
