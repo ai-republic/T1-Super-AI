@@ -57,23 +57,40 @@ public class LLMClientFactory {
     public LLMClientFactory(final AgentConfigurationManager configManager, final ToolRegistry toolRegistry) {
         this.configManager = configManager;
         this.toolRegistry = toolRegistry;
+        // Register this factory with the config manager for cache clearing
+        configManager.setClientFactory(this);
     }
 
     /**
      * Gets or creates a chat client for the specified task type.
      * The client is created based on task-specific provider/model configuration.
+     * Falls back to GENERAL_KNOWLEDGE task model if no specific configuration exists.
      *
      * @param taskType The type of task (GENERAL_KNOWLEDGE, CODING, SPEECH, VIDEO)
      * @return ChatClient configured for the specific task
      * @throws IllegalStateException if no configuration found for task
      */
     public ChatClient getChatClientForTask(final TaskType taskType) {
+        // IMAGE_GENERATION should use ImageModelFactory instead
+        if (taskType == TaskType.IMAGE_GENERATION) {
+            throw new IllegalStateException(
+                "IMAGE_GENERATION task requires ImageModel, not ChatClient. " +
+                "Use ImageModelFactory.getImageModelForTask() instead."
+            );
+        }
+
         final AgentConfiguration config = configManager.getConfiguration();
         final TaskModelConfig taskConfig = config.getTaskModels().get(taskType);
 
         if (taskConfig == null || taskConfig.getProvider() == null) {
-            log.warn("No task-specific configuration for {}, falling back to default provider", taskType);
-            return getChatClient(config.getDefaultProvider());
+            log.warn("No task-specific configuration for {}, falling back to GENERAL_KNOWLEDGE", taskType);
+            // Use GENERAL_KNOWLEDGE as fallback
+            final TaskModelConfig fallbackConfig = config.getTaskModels().get(TaskType.GENERAL_KNOWLEDGE);
+            if (fallbackConfig == null) {
+                throw new IllegalStateException("GENERAL_KNOWLEDGE fallback model not configured");
+            }
+            final String cacheKey = taskType.name() + "_FALLBACK_" + fallbackConfig.getProvider() + "_" + fallbackConfig.getModel();
+            return taskBasedChatClients.computeIfAbsent(cacheKey, k -> createTaskBasedChatClient(fallbackConfig));
         }
 
         // Create a unique key for this task configuration
@@ -95,6 +112,7 @@ public class LLMClientFactory {
 
     /**
      * Creates a chat client for a specific task configuration.
+     * Uses task-specific API key if provided, otherwise falls back to provider's general API key.
      */
     private ChatClient createTaskBasedChatClient(final TaskModelConfig taskConfig) {
         final AgentConfiguration config = configManager.getConfiguration();
@@ -107,12 +125,24 @@ public class LLMClientFactory {
         log.info("Creating task-specific {} chat client with model: {}",
                 taskConfig.getProvider(), taskConfig.getModel());
 
-        // Override the model from task configuration
+        // Override the model and API key from task configuration
         final LLMConfig taskSpecificConfig = new LLMConfig();
-        taskSpecificConfig.setApiKey(llmConfig.getApiKey());
+
+        // Use task-specific API key if provided, otherwise fall back to provider's general API key
+        final String apiKey = (taskConfig.getApiKey() != null && !taskConfig.getApiKey().isEmpty())
+            ? taskConfig.getApiKey()
+            : llmConfig.getApiKey();
+
+        taskSpecificConfig.setApiKey(apiKey);
         taskSpecificConfig.setBaseUrl(llmConfig.getBaseUrl());
         taskSpecificConfig.setModel(taskConfig.getModel());
         taskSpecificConfig.setAdditionalParams(llmConfig.getAdditionalParams());
+
+        if (taskConfig.getApiKey() != null && !taskConfig.getApiKey().isEmpty()) {
+            log.debug("Using task-specific API key for {}", taskConfig.getProvider());
+        } else {
+            log.debug("Using provider's general API key for {}", taskConfig.getProvider());
+        }
 
         return switch (taskConfig.getProvider()) {
             case OPENAI -> createOpenAiChatClient(taskSpecificConfig, config);

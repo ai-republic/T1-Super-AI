@@ -64,6 +64,9 @@ class AgentConfigForm extends HTMLElement {
     render() {
         const isEdit = this.mode === 'edit';
         const nameReadOnly = this.readOnlyName ? 'readonly' : '';
+        const nameHint = isEdit ?
+            'Changing the name will rename the agent folder and update all references' :
+            'Choose a memorable name for your agent';
 
         this.innerHTML = `
             <div class="agent-config-form">
@@ -82,7 +85,7 @@ class AgentConfigForm extends HTMLElement {
                             required
                             ${nameReadOnly}
                         >
-                        <small class="form-hint">Choose a memorable name for your agent</small>
+                        <small class="form-hint">${nameHint}</small>
                     </div>
 
                     <div class="form-group">

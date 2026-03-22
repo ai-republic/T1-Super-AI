@@ -76,27 +76,47 @@ function initializeHTMX() {
  */
 async function checkAndShowSetupWizard() {
     try {
+        console.log('Checking setup status...');
         const response = await fetch('/api/v1/setup/status');
 
         if (response.ok) {
             const result = await response.json();
+            console.log('Setup status response:', result);
 
             if (result.success && result.data && result.data.needsSetup) {
                 console.log('🥚 First-time setup needed - showing wizard');
 
-                // Wait for the custom element to be defined
-                await customElements.whenDefined('setup-wizard');
+                // Wait for the custom element to be defined (with timeout)
+                const timeout = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Timeout waiting for setup-wizard element')), 5000)
+                );
+
+                try {
+                    await Promise.race([
+                        customElements.whenDefined('setup-wizard'),
+                        timeout
+                    ]);
+                    console.log('Setup wizard custom element is defined');
+                } catch (err) {
+                    console.error('Failed to wait for setup-wizard element:', err);
+                    throw err;
+                }
 
                 // Show the setup wizard
                 const wizard = document.querySelector('setup-wizard');
+                console.log('Setup wizard element:', wizard);
                 if (wizard) {
+                    console.log('Calling wizard.show()...');
                     wizard.show();
+                    console.log('Wizard.show() called successfully');
                 } else {
-                    console.error('Setup wizard component not found');
+                    console.error('Setup wizard component not found in DOM');
                 }
             } else {
                 console.log('✅ Setup already completed');
             }
+        } else {
+            console.error('Setup status check failed with status:', response.status);
         }
     } catch (error) {
         console.error('Failed to check setup status:', error);

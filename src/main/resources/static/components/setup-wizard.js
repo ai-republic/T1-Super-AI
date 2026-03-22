@@ -15,25 +15,16 @@ class SetupWizard extends HTMLElement {
         this.currentStep = 1;
         this.totalSteps = 4;
         this.formData = {
-            // LLM Configuration - Multiple providers
-            providers: {
-                OPENAI: { enabled: false, apiKey: '', baseUrl: '', model: '' },
-                ANTHROPIC: { enabled: false, apiKey: '', baseUrl: '', model: '' },
-                OLLAMA: { enabled: false, baseUrl: '', model: '' }
-            },
-            defaultProvider: '',
-            configureTaskModels: false,
-
-            // Task-specific models
+            // Task-specific models (GENERAL_KNOWLEDGE is mandatory as fallback)
             taskModels: {
-                GENERAL_KNOWLEDGE: { provider: '', model: '' },
-                CODING: { provider: '', model: '' },
-                TEXT_TO_SPEECH: { provider: '', model: '' },
-                SPEECH_TO_TEXT: { provider: '', model: '' },
-                IMAGE_ANALYSIS: { provider: '', model: '' },
-                IMAGE_GENERATION: { provider: '', model: '' },
-                VIDEO_ANALYSIS: { provider: '', model: '' },
-                VIDEO_GENERATION: { provider: '', model: '' }
+                GENERAL_KNOWLEDGE: { provider: '', model: '', apiKey: '', baseUrl: '' },
+                CODING: { provider: '', model: '', apiKey: '', baseUrl: '' },
+                TEXT_TO_SPEECH: { provider: '', model: '', apiKey: '', baseUrl: '' },
+                SPEECH_TO_TEXT: { provider: '', model: '', apiKey: '', baseUrl: '' },
+                IMAGE_ANALYSIS: { provider: '', model: '', apiKey: '', baseUrl: '' },
+                IMAGE_GENERATION: { provider: '', model: '', apiKey: '', baseUrl: '' },
+                VIDEO_ANALYSIS: { provider: '', model: '', apiKey: '', baseUrl: '' },
+                VIDEO_GENERATION: { provider: '', model: '', apiKey: '', baseUrl: '' }
             },
 
             // User data
@@ -150,120 +141,23 @@ class SetupWizard extends HTMLElement {
     getLLMConfigStep() {
         return `
             <div class="wizard-step" id="step2">
-                <h2>🤖 Configure LLM Providers</h2>
+                <h2>🤖 Configure AI Models</h2>
                 <p class="step-description">
-                    Configure one or more AI providers. You can use different providers for different tasks.
+                    Configure AI models for different tasks. At minimum, you must configure a <strong>General Knowledge</strong> model that will serve as the fallback for all tasks.
                 </p>
 
                 <div class="info-box info-box-tip">
-                    <strong>💡 Tip:</strong> Configure multiple providers for flexibility. You can use OpenAI for coding,
-                    Claude for writing, and Ollama for offline use!
+                    <strong>💡 Tip:</strong> You can configure different providers and models for different tasks.
+                    For example, use OpenAI GPT-4 for coding, Claude for writing, and DALL-E for image generation!
                 </div>
 
-                <!-- Provider Selection with Inline Configuration -->
-                <div class="form-group">
-                    <label class="form-label">Select Providers <span class="required">*</span></label>
-
-                    <!-- OpenAI Provider -->
-                    <div class="provider-section">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="enableOpenAI"
-                                ${this.formData.providers.OPENAI.enabled ? 'checked' : ''}
-                                onchange="window.setupWizard.toggleProvider('OPENAI')">
-                            <span>🟢 OpenAI (GPT-4, GPT-3.5)</span>
-                        </label>
-                        <div id="openaiConfig" class="provider-config" style="display: none;">
-                            <div class="form-group">
-                                <label for="openaiApiKey" class="form-label">
-                                    API Key <span class="required">*</span>
-                                </label>
-                                <input type="password" id="openaiApiKey" class="form-input"
-                                    placeholder="sk-..." value="${this.formData.providers.OPENAI.apiKey || ''}">
-                                <small class="form-hint">Get your API key from <a href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com/api-keys</a></small>
-                            </div>
-                            <div class="form-group">
-                                <label for="openaiModel" class="form-label">Model (optional)</label>
-                                <input type="text" id="openaiModel" class="form-input"
-                                    placeholder="gpt-4o (default)" value="${this.formData.providers.OPENAI.model || ''}">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Anthropic Provider -->
-                    <div class="provider-section">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="enableAnthropic"
-                                ${this.formData.providers.ANTHROPIC.enabled ? 'checked' : ''}
-                                onchange="window.setupWizard.toggleProvider('ANTHROPIC')">
-                            <span>🟣 Anthropic (Claude)</span>
-                        </label>
-                        <div id="anthropicConfig" class="provider-config" style="display: none;">
-                            <div class="form-group">
-                                <label for="anthropicApiKey" class="form-label">
-                                    API Key <span class="required">*</span>
-                                </label>
-                                <input type="password" id="anthropicApiKey" class="form-input"
-                                    placeholder="sk-ant-..." value="${this.formData.providers.ANTHROPIC.apiKey || ''}">
-                                <small class="form-hint">Get your API key from <a href="https://console.anthropic.com/settings/keys" target="_blank">console.anthropic.com/settings/keys</a></small>
-                            </div>
-                            <div class="form-group">
-                                <label for="anthropicModel" class="form-label">Model (optional)</label>
-                                <input type="text" id="anthropicModel" class="form-input"
-                                    placeholder="claude-3-5-sonnet-20241022 (default)" value="${this.formData.providers.ANTHROPIC.model || ''}">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Ollama Provider -->
-                    <div class="provider-section">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="enableOllama"
-                                ${this.formData.providers.OLLAMA.enabled ? 'checked' : ''}
-                                onchange="window.setupWizard.toggleProvider('OLLAMA')">
-                            <span>🦙 Ollama (Local Models)</span>
-                        </label>
-                        <div id="ollamaConfig" class="provider-config" style="display: none;">
-                            <div class="form-group">
-                                <label for="ollamaBaseUrl" class="form-label">Base URL</label>
-                                <input type="text" id="ollamaBaseUrl" class="form-input"
-                                    placeholder="http://localhost:11434" value="${this.formData.providers.OLLAMA.baseUrl || ''}">
-                                <small class="form-hint">Download Ollama from <a href="https://ollama.ai" target="_blank">ollama.ai</a></small>
-                            </div>
-                            <div class="form-group">
-                                <label for="ollamaModel" class="form-label">Model (optional)</label>
-                                <input type="text" id="ollamaModel" class="form-input"
-                                    placeholder="llama3.2 (default)" value="${this.formData.providers.OLLAMA.model || ''}">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Default Provider Selection -->
-                <div id="defaultProviderGroup" class="form-group" style="display: ${this.hasEnabledProviders() ? 'block' : 'none'};">
-                    <label for="defaultProvider" class="form-label">
-                        Default Provider <span class="required">*</span>
-                    </label>
-                    <select id="defaultProvider" class="form-input" onchange="window.setupWizard.onDefaultProviderChange()">
-                        ${this.renderDefaultProviderOptions()}
-                    </select>
-                    <small class="form-hint">This provider will be used by default for all tasks</small>
-                </div>
-
-                <!-- Task-Specific Models Configuration -->
-                <div class="form-group">
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="configureTaskModels"
-                            ${this.formData.configureTaskModels ? 'checked' : ''}
-                            onchange="window.setupWizard.toggleTaskModels()">
-                        <span>⚙️ Configure task-specific models (optional)</span>
-                    </label>
-                    <small class="form-hint">Use different providers/models for different task types</small>
-                </div>
-
-                <div id="taskModelsConfig" style="display: none;">
+                <div id="taskModelsConfig">
                     <div class="task-models-section">
                         <h4>📝 Text & Reasoning Tasks</h4>
-                        ${this.renderTaskModelConfig('GENERAL_KNOWLEDGE', 'General Knowledge', 'General purpose tasks, Q&A, reasoning')}
+                        <div class="info-box info-box-warning" style="margin-bottom: 1rem; font-size: 0.875rem;">
+                            <strong>Required:</strong> Configure General Knowledge model (serves as fallback for all tasks)
+                        </div>
+                        ${this.renderTaskModelConfig('GENERAL_KNOWLEDGE', 'General Knowledge', 'General purpose tasks, Q&A, reasoning (REQUIRED FALLBACK)')}
                         ${this.renderTaskModelConfig('CODING', 'Coding', 'Code generation, debugging, refactoring')}
 
                         <h4>🎤 Audio Tasks</h4>
@@ -324,159 +218,101 @@ class SetupWizard extends HTMLElement {
         }
     }
 
-    toggleProvider(provider) {
-        // Get checkbox state BEFORE re-rendering
-        const checkboxId = provider === 'OPENAI' ? 'enableOpenAI' :
-                          provider === 'ANTHROPIC' ? 'enableAnthropic' :
-                          'enableOllama';
-
-        const checkbox = document.getElementById(checkboxId);
-        if (!checkbox) return;
-
-        // Update formData
-        this.formData.providers[provider].enabled = checkbox.checked;
-
-        // Save current form values before re-rendering
-        this.saveStep2FormValues();
-
-        // Re-render the step to update everything
-        this.updateWizard();
-    }
-
-    saveStep2FormValues() {
-        // Save LLM provider configs
-        if (this.formData.providers.OPENAI.enabled) {
-            this.formData.providers.OPENAI.apiKey = document.getElementById('openaiApiKey')?.value || '';
-            this.formData.providers.OPENAI.model = document.getElementById('openaiModel')?.value || '';
-        }
-        if (this.formData.providers.ANTHROPIC.enabled) {
-            this.formData.providers.ANTHROPIC.apiKey = document.getElementById('anthropicApiKey')?.value || '';
-            this.formData.providers.ANTHROPIC.model = document.getElementById('anthropicModel')?.value || '';
-        }
-        if (this.formData.providers.OLLAMA.enabled) {
-            this.formData.providers.OLLAMA.baseUrl = document.getElementById('ollamaBaseUrl')?.value || '';
-            this.formData.providers.OLLAMA.model = document.getElementById('ollamaModel')?.value || '';
-        }
-
-        // Save default provider
-        const defaultSelect = document.getElementById('defaultProvider');
-        if (defaultSelect && defaultSelect.value) {
-            this.formData.defaultProvider = defaultSelect.value;
-        }
-
-        // Save task models checkbox
-        const taskModelsCheckbox = document.getElementById('configureTaskModels');
-        if (taskModelsCheckbox) {
-            this.formData.configureTaskModels = taskModelsCheckbox.checked;
-        }
-    }
-
-    onDefaultProviderChange() {
-        const select = document.getElementById('defaultProvider');
-        if (select && select.value) {
-            this.formData.defaultProvider = select.value;
-        }
-    }
-
-
-    hasEnabledProviders() {
-        return this.formData.providers.OPENAI.enabled ||
-               this.formData.providers.ANTHROPIC.enabled ||
-               this.formData.providers.OLLAMA.enabled;
-    }
-
-    renderDefaultProviderOptions() {
-        const enabledProviders = [];
-        if (this.formData.providers.OPENAI.enabled) enabledProviders.push('OPENAI');
-        if (this.formData.providers.ANTHROPIC.enabled) enabledProviders.push('ANTHROPIC');
-        if (this.formData.providers.OLLAMA.enabled) enabledProviders.push('OLLAMA');
-
-        console.log('[renderDefaultProviderOptions] Enabled providers:', enabledProviders);
-        console.log('[renderDefaultProviderOptions] Current formData.defaultProvider:', this.formData.defaultProvider);
-
-        if (enabledProviders.length === 0) {
-            return '<option value="">Please enable at least one provider above</option>';
-        }
-
-        // Auto-select first if none selected
-        if (!this.formData.defaultProvider || !enabledProviders.includes(this.formData.defaultProvider)) {
-            this.formData.defaultProvider = enabledProviders[0];
-            console.log('[renderDefaultProviderOptions] Auto-selected:', this.formData.defaultProvider);
-        }
-
-        let html = '';
-        enabledProviders.forEach(provider => {
-            const selected = this.formData.defaultProvider === provider ? 'selected' : '';
-            const name = provider === 'OPENAI' ? '🟢 OpenAI' :
-                        provider === 'ANTHROPIC' ? '🟣 Anthropic' :
-                        '🦙 Ollama';
-            html += `<option value="${provider}" ${selected}>${name}</option>`;
-            console.log('[renderDefaultProviderOptions] Added option:', provider, 'selected:', selected);
-        });
-
-        console.log('[renderDefaultProviderOptions] Final HTML:', html);
-        return html;
-    }
-
-    toggleTaskModels() {
-        const checkbox = document.getElementById('configureTaskModels');
-        const config = document.getElementById('taskModelsConfig');
-
-        if (checkbox) {
-            this.formData.configureTaskModels = checkbox.checked;
-        }
-
-        if (config) {
-            config.style.display = this.formData.configureTaskModels ? 'block' : 'none';
-        }
-    }
 
     renderTaskModelConfig(taskType, displayName, description) {
-        const enabledProviders = this.getEnabledProvidersList();
         const currentSelection = this.formData.taskModels[taskType];
+        const isRequired = taskType === 'GENERAL_KNOWLEDGE';
 
         return `
-            <div class="task-model-item">
+            <div class="task-model-item ${isRequired ? 'task-model-required' : ''}">
                 <div class="task-model-header">
-                    <strong>${displayName}</strong>
+                    <strong>${displayName}${isRequired ? ' <span class="required">*</span>' : ''}</strong>
                     <small>${description}</small>
                 </div>
                 <div class="task-model-controls">
-                    <select id="taskModel_${taskType}_provider" class="form-input"
-                        onchange="window.setupWizard.updateTaskModelProvider('${taskType}')">
-                        <option value="">Use default provider</option>
-                        ${enabledProviders.map(p => `<option value="${p}" ${currentSelection.provider === p ? 'selected' : ''}>${this.getProviderDisplayName(p)}</option>`).join('')}
-                    </select>
-                    <input type="text" id="taskModel_${taskType}_model" class="form-input"
-                        placeholder="Model name (optional)"
-                        value="${currentSelection.model || ''}"
-                        onchange="window.setupWizard.updateTaskModelModel('${taskType}')">
+                    <div class="task-model-row">
+                        <label class="form-label">Provider${isRequired ? ' <span class="required">*</span>' : ''}</label>
+                        <select id="taskModel_${taskType}_provider" class="form-input"
+                            onchange="window.setupWizard.updateTaskModelProvider('${taskType}')"
+                            ${isRequired ? 'required' : ''}>
+                            <option value="">-- Select Provider --</option>
+                            <option value="OPENAI" ${currentSelection.provider === 'OPENAI' ? 'selected' : ''}>🟢 OpenAI (GPT-4, DALL-E)</option>
+                            <option value="ANTHROPIC" ${currentSelection.provider === 'ANTHROPIC' ? 'selected' : ''}>🟣 Anthropic (Claude)</option>
+                            <option value="OLLAMA" ${currentSelection.provider === 'OLLAMA' ? 'selected' : ''}>🦙 Ollama (Local)</option>
+                        </select>
+                    </div>
+                    <div class="task-model-row">
+                        <label class="form-label">Model Name (optional)</label>
+                        <input type="text" id="taskModel_${taskType}_model" class="form-input"
+                            placeholder="${this.getDefaultModel(currentSelection.provider)}"
+                            value="${currentSelection.model || ''}"
+                            onchange="window.setupWizard.updateTaskModelModel('${taskType}')">
+                        <small class="form-hint">${this.getModelSuggestion(taskType, currentSelection.provider)}</small>
+                    </div>
+                    <div class="task-model-row">
+                        <label class="form-label">API Key${currentSelection.provider !== 'OLLAMA' && isRequired ? ' <span class="required">*</span>' : ' (optional)'}</label>
+                        <input type="password" id="taskModel_${taskType}_apiKey" class="form-input"
+                            placeholder="${currentSelection.provider === 'OLLAMA' ? 'Not required for Ollama' : 'Enter API key'}"
+                            value="${currentSelection.apiKey || ''}"
+                            onchange="window.setupWizard.updateTaskModelApiKey('${taskType}')"
+                            ${currentSelection.provider !== 'OLLAMA' && isRequired ? 'required' : ''}>
+                        <small class="form-hint">${this.getProviderInstructions(currentSelection.provider)}</small>
+                    </div>
+                    <div class="task-model-row">
+                        <label class="form-label">Base URL (optional)</label>
+                        <input type="text" id="taskModel_${taskType}_baseUrl" class="form-input"
+                            placeholder="${this.getDefaultBaseUrl(currentSelection.provider)}"
+                            value="${currentSelection.baseUrl || ''}"
+                            onchange="window.setupWizard.updateTaskModelBaseUrl('${taskType}')">
+                        <small class="form-hint">Leave empty to use default</small>
+                    </div>
                 </div>
             </div>
         `;
     }
 
-    getEnabledProvidersList() {
-        const providers = [];
-        if (this.formData.providers.OPENAI.enabled) providers.push('OPENAI');
-        if (this.formData.providers.ANTHROPIC.enabled) providers.push('ANTHROPIC');
-        if (this.formData.providers.OLLAMA.enabled) providers.push('OLLAMA');
-        return providers;
-    }
+    getModelSuggestion(taskType, provider) {
+        if (!provider) return 'Select a provider first';
 
-    getProviderDisplayName(provider) {
-        switch(provider) {
-            case 'OPENAI': return '🟢 OpenAI';
-            case 'ANTHROPIC': return '🟣 Anthropic';
-            case 'OLLAMA': return '🦙 Ollama';
-            default: return provider;
-        }
+        const suggestions = {
+            'GENERAL_KNOWLEDGE': {
+                'OPENAI': 'gpt-4o or gpt-4',
+                'ANTHROPIC': 'claude-3-5-sonnet-20241022',
+                'OLLAMA': 'llama3.2 or mistral'
+            },
+            'CODING': {
+                'OPENAI': 'gpt-4o or o1-preview',
+                'ANTHROPIC': 'claude-3-5-sonnet-20241022',
+                'OLLAMA': 'codellama or deepseek-coder'
+            },
+            'SPEECH_TO_TEXT': {
+                'OPENAI': 'whisper-1'
+            },
+            'TEXT_TO_SPEECH': {
+                'OPENAI': 'tts-1 or tts-1-hd'
+            },
+            'IMAGE_ANALYSIS': {
+                'OPENAI': 'gpt-4o or gpt-4-vision-preview',
+                'ANTHROPIC': 'claude-3-5-sonnet-20241022'
+            },
+            'IMAGE_GENERATION': {
+                'OPENAI': 'dall-e-3'
+            },
+            'VIDEO_ANALYSIS': {
+                'OPENAI': 'gpt-4o',
+                'ANTHROPIC': 'claude-3-5-sonnet-20241022'
+            }
+        };
+
+        return suggestions[taskType]?.[provider] || 'Leave empty for provider default';
     }
 
     updateTaskModelProvider(taskType) {
         const select = document.getElementById(`taskModel_${taskType}_provider`);
         if (select) {
             this.formData.taskModels[taskType].provider = select.value;
+            // Re-render to update placeholders and suggestions
+            this.updateWizard();
         }
     }
 
@@ -484,6 +320,20 @@ class SetupWizard extends HTMLElement {
         const input = document.getElementById(`taskModel_${taskType}_model`);
         if (input) {
             this.formData.taskModels[taskType].model = input.value.trim();
+        }
+    }
+
+    updateTaskModelApiKey(taskType) {
+        const input = document.getElementById(`taskModel_${taskType}_apiKey`);
+        if (input) {
+            this.formData.taskModels[taskType].apiKey = input.value.trim();
+        }
+    }
+
+    updateTaskModelBaseUrl(taskType) {
+        const input = document.getElementById(`taskModel_${taskType}_baseUrl`);
+        if (input) {
+            this.formData.taskModels[taskType].baseUrl = input.value.trim();
         }
     }
 
@@ -601,8 +451,8 @@ class SetupWizard extends HTMLElement {
                     <h3>LLM Configuration</h3>
                     <div class="confirmation-grid">
                         <div class="confirmation-item">
-                            <span class="confirmation-label">Default Provider:</span>
-                            <span class="confirmation-value">${this.formData.defaultProvider}</span>
+                            <span class="confirmation-label">Fallback Model:</span>
+                            <span class="confirmation-value">${this.formData.taskModels.GENERAL_KNOWLEDGE.provider} / ${this.formData.taskModels.GENERAL_KNOWLEDGE.model || 'default'}</span>
                         </div>
                         ${this.formData.providers.OPENAI.enabled ? `
                         <div class="confirmation-item">
@@ -727,43 +577,23 @@ class SetupWizard extends HTMLElement {
                 return true;
 
             case 2:
-                // LLM Configuration validation
-                const enabledProviders = [];
-                if (document.getElementById('enableOpenAI')?.checked) enabledProviders.push('OPENAI');
-                if (document.getElementById('enableAnthropic')?.checked) enabledProviders.push('ANTHROPIC');
-                if (document.getElementById('enableOllama')?.checked) enabledProviders.push('OLLAMA');
+                // Task Model Configuration validation
+                // Check that GENERAL_KNOWLEDGE is configured (mandatory fallback)
+                const genKnowledgeProvider = document.getElementById('taskModel_GENERAL_KNOWLEDGE_provider')?.value;
+                console.log('Validating GENERAL_KNOWLEDGE provider:', genKnowledgeProvider);
 
-                console.log('Step 2 validation - enabled providers:', enabledProviders);
-
-                if (enabledProviders.length === 0) {
-                    this.showError('Please select at least one LLM provider');
+                if (!genKnowledgeProvider) {
+                    this.showError('Please select a provider for the General Knowledge model (required as fallback for all tasks)');
                     return false;
                 }
 
-                // Validate API keys for enabled providers
-                if (enabledProviders.includes('OPENAI')) {
-                    const openaiKey = document.getElementById('openaiApiKey')?.value?.trim();
-                    if (!openaiKey) {
-                        this.showError('Please enter your OpenAI API key');
+                // Validate API key for GENERAL_KNOWLEDGE if not Ollama
+                if (genKnowledgeProvider !== 'OLLAMA') {
+                    const genKnowledgeApiKey = document.getElementById('taskModel_GENERAL_KNOWLEDGE_apiKey')?.value?.trim();
+                    if (!genKnowledgeApiKey) {
+                        this.showError('Please enter an API key for the General Knowledge model');
                         return false;
                     }
-                }
-
-                if (enabledProviders.includes('ANTHROPIC')) {
-                    const anthropicKey = document.getElementById('anthropicApiKey')?.value?.trim();
-                    if (!anthropicKey) {
-                        this.showError('Please enter your Anthropic API key');
-                        return false;
-                    }
-                }
-
-                // Check default provider is selected - use formData since it's the source of truth
-                console.log('Validating default provider:');
-                console.log('  formData.defaultProvider:', this.formData.defaultProvider);
-
-                if (!this.formData.defaultProvider) {
-                    this.showError('Please select a default provider');
-                    return false;
                 }
 
                 console.log('Step 2 validation passed');
@@ -811,51 +641,8 @@ class SetupWizard extends HTMLElement {
     saveCurrentStepData() {
         switch(this.currentStep) {
             case 2:
-                // Save LLM configuration for each enabled provider
-                this.formData.providers.OPENAI.enabled = document.getElementById('enableOpenAI')?.checked || false;
-                if (this.formData.providers.OPENAI.enabled) {
-                    this.formData.providers.OPENAI.apiKey = document.getElementById('openaiApiKey')?.value?.trim() || '';
-                    this.formData.providers.OPENAI.model = document.getElementById('openaiModel')?.value?.trim() || '';
-                    this.formData.providers.OPENAI.baseUrl = 'https://api.openai.com/v1';
-                }
-
-                this.formData.providers.ANTHROPIC.enabled = document.getElementById('enableAnthropic')?.checked || false;
-                if (this.formData.providers.ANTHROPIC.enabled) {
-                    this.formData.providers.ANTHROPIC.apiKey = document.getElementById('anthropicApiKey')?.value?.trim() || '';
-                    this.formData.providers.ANTHROPIC.model = document.getElementById('anthropicModel')?.value?.trim() || '';
-                    this.formData.providers.ANTHROPIC.baseUrl = 'https://api.anthropic.com';
-                }
-
-                this.formData.providers.OLLAMA.enabled = document.getElementById('enableOllama')?.checked || false;
-                if (this.formData.providers.OLLAMA.enabled) {
-                    this.formData.providers.OLLAMA.baseUrl = document.getElementById('ollamaBaseUrl')?.value?.trim() || 'http://localhost:11434';
-                    this.formData.providers.OLLAMA.model = document.getElementById('ollamaModel')?.value?.trim() || '';
-                }
-
-                const defaultProviderSelect = document.getElementById('defaultProvider');
-                const defaultProviderValue = defaultProviderSelect?.value;
-
-                console.log('[saveCurrentStepData] Step 2:');
-                console.log('  defaultProvider select:', defaultProviderSelect);
-                console.log('  defaultProvider value from DOM:', defaultProviderValue);
-                console.log('  formData.defaultProvider before:', this.formData.defaultProvider);
-
-                // Prioritize formData if select value is empty
-                this.formData.defaultProvider = defaultProviderValue || this.formData.defaultProvider || '';
-
-                console.log('  formData.defaultProvider after:', this.formData.defaultProvider);
-
-                // Save task models if configured
-                this.formData.configureTaskModels = document.getElementById('configureTaskModels')?.checked || false;
-                if (this.formData.configureTaskModels) {
-                    // Task models are saved in real-time via updateTaskModelProvider/Model functions
-                    // No need to save here
-                }
-
+                // Task models are saved in real-time via updateTaskModel* functions
                 console.log('Saved step 2 data:', {
-                    providers: this.formData.providers,
-                    defaultProvider: this.formData.defaultProvider,
-                    configureTaskModels: this.formData.configureTaskModels,
                     taskModels: this.formData.taskModels
                 });
                 break;
@@ -947,26 +734,7 @@ class SetupWizard extends HTMLElement {
         }
 
         // Initialize step-specific UI after rendering
-        if (this.currentStep === 2) {
-            // Show provider config panels if already enabled
-            if (this.formData.providers.OPENAI.enabled) {
-                const el = document.getElementById('openaiConfig');
-                if (el) el.style.display = 'block';
-            }
-            if (this.formData.providers.ANTHROPIC.enabled) {
-                const el = document.getElementById('anthropicConfig');
-                if (el) el.style.display = 'block';
-            }
-            if (this.formData.providers.OLLAMA.enabled) {
-                const el = document.getElementById('ollamaConfig');
-                if (el) el.style.display = 'block';
-            }
-            // Show task models if already checked
-            if (this.formData.configureTaskModels) {
-                const el = document.getElementById('taskModelsConfig');
-                if (el) el.style.display = 'block';
-            }
-        } else if (this.currentStep === 4) {
+        if (this.currentStep === 4) {
             // Populate agent config form with saved data
             this.populateAgentConfigForm();
 

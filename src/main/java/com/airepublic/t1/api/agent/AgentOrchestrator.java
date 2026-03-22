@@ -16,6 +16,10 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.content.Media;
+import org.springframework.ai.image.ImageModel;
+import org.springframework.ai.image.ImagePrompt;
+import org.springframework.ai.image.ImageResponse;
+import org.springframework.ai.openai.OpenAiImageOptions;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.stereotype.Component;
@@ -47,6 +51,7 @@ public class AgentOrchestrator {
     private final AgentConfigurationManager configManager;
     private final ToolRegistry toolRegistry;
     private final LLMClientFactory llmClientFactory;
+    private final ImageModelFactory imageModelFactory;
     private final CLIFormatter formatter;
     private final SessionContextManager sessionContextManager;
     private final AutoModelSelectorTool autoModelSelectorTool;
@@ -74,6 +79,7 @@ public class AgentOrchestrator {
     private static final ThreadLocal<String> THREAD_SESSION_CONTEXT = new ThreadLocal<>();
     private static final ThreadLocal<String> CURRENT_AGENT_CONTEXT = new ThreadLocal<>();
     private static final ThreadLocal<String> CURRENT_PANEL_ID = new ThreadLocal<>();
+    private static final ThreadLocal<MessageAttachment> GENERATED_IMAGE_ATTACHMENT = new ThreadLocal<>();
 
     // Fallback global storage for backward compatibility (used only when ThreadLocal is not set)
     // This should rarely be used in normal operation
@@ -121,6 +127,7 @@ public class AgentOrchestrator {
         THREAD_SESSION_CONTEXT.remove();
         CURRENT_AGENT_CONTEXT.remove();
         CURRENT_PANEL_ID.remove();
+        GENERATED_IMAGE_ATTACHMENT.remove();
 
         log.debug("🧹 Thread {} cleared context - Agent: {}, Panel: {}",
                   Thread.currentThread().getName(), agent, panel);
@@ -138,6 +145,15 @@ public class AgentOrchestrator {
      */
     public String getCurrentThreadPanelId() {
         return CURRENT_PANEL_ID.get();
+    }
+
+    /**
+     * Get the current panel ID statically (for use by tools).
+     * Returns panel ID or thread name as fallback.
+     */
+    public static String getPanelIdForCurrentThread() {
+        String panelId = CURRENT_PANEL_ID.get();
+        return panelId != null ? panelId : Thread.currentThread().getName();
     }
 
     /**
@@ -226,24 +242,52 @@ public class AgentOrchestrator {
             final String currentAgent = CURRENT_AGENT_CONTEXT.get() != null ?
                 CURRENT_AGENT_CONTEXT.get() :
                 (agentManager != null ? agentManager.getCurrentAgentName() : null);
+
+            // Check if there's a generated image attachment to add
+            final MessageAttachment imageAttachment = GENERATED_IMAGE_ATTACHMENT.get();
+            final List<MessageAttachment> messageAttachments = imageAttachment != null ?
+                    List.of(imageAttachment) : null;
+
+            if (imageAttachment != null) {
+                log.info("📎 DEBUG: Image attachment found in ThreadLocal:");
+                log.info("   - Filename: {}", imageAttachment.getFilename());
+                log.info("   - MIME Type: {}", imageAttachment.getMimeType());
+                log.info("   - Has base64: {}", imageAttachment.getContentBase64() != null);
+                log.info("   - Base64 length: {}", imageAttachment.getContentBase64() != null ? imageAttachment.getContentBase64().length() : 0);
+            } else {
+                log.warn("📎 DEBUG: No image attachment found in ThreadLocal");
+            }
+
             final ConversationMessage assistantMsg = ConversationMessage.builder()
                     .role("assistant")
                     .content(finalResponse)
                     .agentName(currentAgent)
                     .timestamp(LocalDateTime.now())
-                    .modelUsed(configManager.getCurrentModel())
+                    .modelUsed(configManager.getFallbackModel())
+                    .attachments(messageAttachments)
                     .build();
             getConversationHistory().add(assistantMsg);
+
+            // Clear the image attachment ThreadLocal after using it
+            if (imageAttachment != null) {
+                log.info("📎 Added image attachment to assistant message");
+                GENERATED_IMAGE_ATTACHMENT.remove();
+            }
 
             // Store in vector memory if available
             if (memoryService != null) {
                 final AgentConfiguration config = configManager.getConfiguration();
-                memoryService.storePrompt(
-                        userMessage,
-                        finalResponse,
-                        config.getDefaultProvider().toString(),
-                        config.getLlmConfigs().get(config.getDefaultProvider()).getModel()
-                        );
+                // Use GENERAL_KNOWLEDGE as fallback for memory storage
+                final AgentConfiguration.TaskModelConfig fallbackConfig =
+                        config.getTaskModels().get(AgentConfiguration.TaskType.GENERAL_KNOWLEDGE);
+                if (fallbackConfig != null) {
+                    memoryService.storePrompt(
+                            userMessage,
+                            finalResponse,
+                            fallbackConfig.getProvider().toString(),
+                            fallbackConfig.getModel()
+                    );
+                }
             }
 
             // Save conversation to agent memory (MEMORY.md)
@@ -265,6 +309,74 @@ public class AgentOrchestrator {
     }
 
     /**
+     * Handles image generation requests using ImageModel.
+     * Returns the raw image data as an attachment so the UI can display it.
+     *
+     * @param userMessage The user's image generation prompt
+     * @return Simple confirmation message (actual image is in attachments)
+     */
+    private String handleImageGeneration(final String userMessage) {
+        try {
+            // Get the image model
+            final ImageModel imageModel = imageModelFactory.getImageModelForTask();
+            log.info("🎨 Using ImageModel for image generation");
+
+            // Create image prompt (default options are set in ImageModelFactory)
+            final ImagePrompt imagePrompt = new ImagePrompt(userMessage);
+
+            // Generate image
+            log.info("🖼️ Generating image with prompt: {}", userMessage);
+            final ImageResponse response = imageModel.call(imagePrompt);
+
+            // Extract image data (URL or base64)
+            if (response != null && response.getResults() != null && !response.getResults().isEmpty()) {
+                final var imageOutput = response.getResult().getOutput();
+
+                // Check if response has URL (DALL-E models) or base64 (gpt-image models)
+                if (imageOutput.getUrl() != null && !imageOutput.getUrl().isEmpty()) {
+                    final String imageUrl = imageOutput.getUrl();
+                    log.info("✅ Image generated successfully with URL: {}", imageUrl);
+
+                    // For URL responses, return the URL for the UI to handle
+                    return "I've generated an image based on your prompt.\n\nImage URL: " + imageUrl;
+
+                } else if (imageOutput.getB64Json() != null && !imageOutput.getB64Json().isEmpty()) {
+                    final String base64Data = imageOutput.getB64Json();
+                    log.info("✅ Image generated successfully as base64 ({} characters)", base64Data.length());
+
+                    // Create MessageAttachment with the image data
+                    final MessageAttachment imageAttachment = MessageAttachment.builder()
+                            .id(java.util.UUID.randomUUID().toString())
+                            .filename("generated_image_" + System.currentTimeMillis() + ".png")
+                            .mimeType("image/png")
+                            .contentBase64(base64Data)
+                            .fileSize((long) base64Data.length())
+                            .description("Generated image: " + userMessage)
+                            .build();
+
+                    // Add the image as attachment to the current conversation
+                    // Store in thread-local for the calling code to retrieve
+                    GENERATED_IMAGE_ATTACHMENT.set(imageAttachment);
+
+                    log.info("✅ Image attachment created and stored");
+                    return "I've generated an image based on your prompt. The image is attached to this message.";
+
+                } else {
+                    log.error("Image generation returned result but no URL or base64 data");
+                    return "Error: Image generation failed - no image data in response";
+                }
+            } else {
+                log.error("Image generation returned no results");
+                return "Error: Image generation failed - no results returned";
+            }
+
+        } catch (final Exception e) {
+            log.error("Error during image generation", e);
+            return "Error generating image: " + e.getMessage();
+        }
+    }
+
+    /**
      * Selects the appropriate chat client based on automatic model selection.
      * If auto-selection is enabled, analyzes the prompt to detect task type.
      * Falls back to default provider if disabled or no task-specific model found.
@@ -273,48 +385,31 @@ public class AgentOrchestrator {
         // Clear previous model info
         currentModelInfo = null;
 
-        // If auto-selection is disabled, use default provider
+        // If auto-selection is disabled, use GENERAL_KNOWLEDGE fallback
         if (!autoModelSelectionEnabled) {
-            log.debug("Auto model selection disabled, using default provider");
-            return llmClientFactory.getChatClient(
-                    configManager.getConfiguration().getDefaultProvider()
-            );
+            log.debug("Auto model selection disabled, using GENERAL_KNOWLEDGE fallback");
+            return llmClientFactory.getChatClientForTask(TaskType.GENERAL_KNOWLEDGE);
         }
 
         // Try to detect task type from prompt
         final Optional<TaskType> detectedTaskType = autoModelSelectorTool.selectTaskTypeForPrompt(userMessage);
 
         if (detectedTaskType.isEmpty()) {
-            log.debug("No specific task type detected, using default provider");
-            return llmClientFactory.getChatClient(
-                    configManager.getConfiguration().getDefaultProvider()
-            );
+            log.debug("No specific task type detected, using GENERAL_KNOWLEDGE fallback");
+            return llmClientFactory.getChatClientForTask(TaskType.GENERAL_KNOWLEDGE);
         }
 
-        // Check if task-specific model is configured
         final TaskType taskType = detectedTaskType.get();
-        final AgentConfiguration config = configManager.getConfiguration();
-        final AgentConfiguration.TaskModelConfig taskConfig =
-                config.getTaskModels().get(taskType);
+        log.debug("Detected task type: {}", taskType);
 
-        if (taskConfig == null) {
-            log.warn("⚠️ Task type {} detected but no task-specific model configured! Using default provider instead.", taskType);
-            log.warn("💡 To use task-specific models, configure them with: /task-model set {} <provider> <model>", taskType);
-            return llmClientFactory.getChatClient(config.getDefaultProvider());
+        // IMAGE_GENERATION should be handled via tools, not direct model selection
+        // Use GENERAL_KNOWLEDGE chat client so the agent can call execute_with_task_model tool
+        if (taskType == TaskType.IMAGE_GENERATION) {
+            log.info("IMAGE_GENERATION detected - using GENERAL_KNOWLEDGE chat client (agent will use tools for image generation)");
+            return llmClientFactory.getChatClientForTask(TaskType.GENERAL_KNOWLEDGE);
         }
 
-        // Use task-specific model
-        log.info("🎯 Auto-selected model for {}: {} - {}",
-                taskType.getDisplayName(),
-                taskConfig.getProvider(),
-                taskConfig.getModel());
-
-        // Store model info for display (without printing it here - prevents it from appearing in input field)
-        currentModelInfo = String.format("\033[90m[%s: %s/%s]\033[0m",
-                taskType.getDisplayName(),
-                taskConfig.getProvider(),
-                taskConfig.getModel());
-
+        // Use task-specific model (getChatClientForTask will log and handle fallback)
         return llmClientFactory.getChatClientForTask(taskType);
     }
 
@@ -412,6 +507,22 @@ public class AgentOrchestrator {
                             .chatResponse();
                     long llmTime = System.currentTimeMillis() - llmStart;
                     log.info("✅ LLM responded successfully in {}ms", llmTime);
+
+                    // Check if any tools generated an image attachment during LLM execution
+                    // Spring AI executes tools as function callbacks, so we check after the call completes
+                    final MessageAttachment imageAttachment =
+                        com.airepublic.t1.tools.ExecuteWithTaskModelTool.getLatestGeneratedImageAttachment();
+                    if (imageAttachment != null) {
+                        log.info("📎 Image attachment detected after LLM call");
+                        log.info("   - Filename: {}", imageAttachment.getFilename());
+                        log.info("   - MIME Type: {}", imageAttachment.getMimeType());
+                        log.info("   - Has base64: {}", imageAttachment.getContentBase64() != null);
+                        // Store in AgentOrchestrator's ThreadLocal for later retrieval
+                        GENERATED_IMAGE_ATTACHMENT.set(imageAttachment);
+                        // Clear the tool's atomic reference
+                        com.airepublic.t1.tools.ExecuteWithTaskModelTool.clearLatestGeneratedImageAttachment();
+                    }
+
                 } catch (Exception llmError) {
                     log.error("❌ LLM call failed: {}", llmError.getMessage(), llmError);
                     throw new RuntimeException("LLM API call failed: " + llmError.getMessage(), llmError);
@@ -471,6 +582,25 @@ public class AgentOrchestrator {
                         final long executionTime = System.currentTimeMillis() - startTime;
 
                         formatter.printToolCall(toolName, result);
+
+                        // Check if the tool generated an image attachment
+                        // This happens with execute_with_task_model tool for IMAGE_GENERATION
+                        if ("execute_with_task_model".equals(toolName)) {
+                            final MessageAttachment imageAttachment =
+                                com.airepublic.t1.tools.ExecuteWithTaskModelTool.getLatestGeneratedImageAttachment();
+                            if (imageAttachment != null) {
+                                log.info("📎 Image attachment detected from tool execution");
+                                log.info("   - Filename: {}", imageAttachment.getFilename());
+                                log.info("   - MIME Type: {}", imageAttachment.getMimeType());
+                                log.info("   - Has base64: {}", imageAttachment.getContentBase64() != null);
+                                // Store in AgentOrchestrator's ThreadLocal for later retrieval
+                                GENERATED_IMAGE_ATTACHMENT.set(imageAttachment);
+                                // Clear the tool's atomic reference
+                                com.airepublic.t1.tools.ExecuteWithTaskModelTool.clearLatestGeneratedImageAttachment();
+                            } else {
+                                log.warn("📎 No image attachment from execute_with_task_model tool");
+                            }
+                        }
 
                         // Broadcast tool result to UI
                         messageBroadcaster.broadcastToolResult(currentAgent, toolName, result, true, executionTime);

@@ -96,6 +96,150 @@ function closeCreateAgentModal() {
     }
 }
 
+function closeAddTeamModal() {
+    const modal = document.getElementById('addTeamModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+async function handleAddTeamSubmit(event) {
+    event.preventDefault();
+
+    const input = document.getElementById('newTeamNameInput');
+    const teamName = input.value.trim();
+
+    if (!teamName) {
+        showToast('Team name is required', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/v1/teams/switch', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders()
+            },
+            body: JSON.stringify({ teamName })
+        });
+
+        if (response.ok) {
+            showToast(`Team "${teamName}" created and activated`, 'success');
+
+            // Close the modal
+            closeAddTeamModal();
+
+            // Clear the input
+            input.value = '';
+
+            // Reload teams in team selector
+            if (window.teamSelector) {
+                await window.teamSelector.loadTeams();
+            }
+
+            // Dispatch team-changed event
+            window.dispatchEvent(new CustomEvent('team-changed', {
+                detail: teamName
+            }));
+        } else {
+            const error = await response.json();
+            showToast(error.message || 'Failed to create team', 'error');
+        }
+    } catch (error) {
+        console.error('Failed to create team:', error);
+        showToast('Failed to create team', 'error');
+    }
+}
+
+async function showCloneAgentModal(agentName, sourceTeam) {
+    const modal = document.getElementById('cloneAgentModal');
+    if (!modal) return;
+
+    // Set agent info
+    document.getElementById('cloneAgentName').value = agentName;
+    document.getElementById('cloneSourceTeam').value = sourceTeam;
+    document.getElementById('cloneAgentDisplayName').textContent = agentName;
+    document.getElementById('cloneSourceTeamDisplay').textContent = sourceTeam;
+
+    // Load teams for dropdown
+    try {
+        const response = await fetch('/api/v1/teams', {
+            headers: getAuthHeaders()
+        });
+
+        if (response.ok) {
+            const apiResponse = await response.json();
+            const teams = apiResponse.data || [];
+
+            const select = document.getElementById('cloneTargetTeam');
+            select.innerHTML = '<option value="">-- Select Team --</option>';
+
+            teams.forEach(team => {
+                // Exclude the source team from the dropdown
+                if (team !== sourceTeam) {
+                    const option = document.createElement('option');
+                    option.value = team;
+                    option.textContent = team;
+                    select.appendChild(option);
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Failed to load teams:', error);
+        showToast('Failed to load teams', 'error');
+    }
+
+    modal.classList.add('active');
+}
+
+function closeCloneAgentModal() {
+    const modal = document.getElementById('cloneAgentModal');
+    if (modal) {
+        modal.classList.remove('active');
+    }
+}
+
+async function handleCloneAgentSubmit(event) {
+    event.preventDefault();
+
+    const agentName = document.getElementById('cloneAgentName').value;
+    const sourceTeam = document.getElementById('cloneSourceTeam').value;
+    const targetTeam = document.getElementById('cloneTargetTeam').value;
+
+    if (!targetTeam) {
+        showToast('Please select a target team', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/v1/agents/clone', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...getAuthHeaders()
+            },
+            body: JSON.stringify({
+                agentName,
+                sourceTeam,
+                targetTeam
+            })
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            showToast(result.message || `Agent "${agentName}" cloned to team "${targetTeam}"`, 'success');
+            closeCloneAgentModal();
+        } else {
+            const error = await response.json();
+            showToast(error.message || 'Failed to clone agent', 'error');
+        }
+    } catch (error) {
+        console.error('Failed to clone agent:', error);
+        showToast('Failed to clone agent', 'error');
+    }
+}
+
 // Close modals when clicking outside
 document.addEventListener('click', (e) => {
     if (e.target.classList.contains('modal')) {

@@ -3,22 +3,16 @@
 let agentSelectorInstance = null;
 
 window.addEventListener('team-changed', (event) => {
-    console.log('[AgentSelector Global Listener] Team changed to:', event.detail);
-
     // If the component instance exists, update it directly
     if (agentSelectorInstance) {
         // Only reload agents if the team actually changed
         if (agentSelectorInstance.currentTeam !== event.detail) {
-            console.log('[AgentSelector] Team actually changed from', agentSelectorInstance.currentTeam, 'to', event.detail);
             agentSelectorInstance.currentTeam = event.detail;
             agentSelectorInstance.currentAgent = null; // Clear agent only on actual team change
             agentSelectorInstance.loadAgents();
-        } else {
-            console.log('[AgentSelector] Team unchanged, ignoring duplicate event');
         }
     } else {
         // Component not ready yet - store the team for later
-        console.log('[AgentSelector] Component not ready, storing team');
         window._pendingTeamForAgentSelector = event.detail;
     }
 });
@@ -32,15 +26,11 @@ class AgentSelector extends HTMLElement {
 
         // Register this instance globally so the event listener can access it
         agentSelectorInstance = this;
-
-        console.log('[AgentSelector] Constructor called');
     }
 
     async connectedCallback() {
         this.render();
         this._isLoading = false; // Track if we're currently loading
-
-        console.log('[AgentSelector] Component connected');
 
         // Wait a moment to see if team-selector dispatches an event
         // This helps avoid race conditions on initial page load
@@ -48,16 +38,12 @@ class AgentSelector extends HTMLElement {
 
         // Check if a team was already set before this component was ready
         if (window._pendingTeamForAgentSelector) {
-            console.log('[AgentSelector] Found pending team:', window._pendingTeamForAgentSelector);
             this.currentTeam = window._pendingTeamForAgentSelector;
             delete window._pendingTeamForAgentSelector;
             await this.loadAgents();
         } else if (!this.currentTeam) {
             // Only load if we don't have a team yet (event might have already set it)
-            console.log('[AgentSelector] No pending team, loading current team from API...');
             await this.loadCurrentTeamAndAgents();
-        } else {
-            console.log('[AgentSelector] Team already set to:', this.currentTeam);
         }
 
         // Refresh agents every 5 seconds (only if we have a team set)
@@ -77,11 +63,10 @@ class AgentSelector extends HTMLElement {
             if (response.ok) {
                 const apiResponse = await response.json();
                 this.currentTeam = apiResponse.data || 'Default';
-                console.log('[AgentSelector] Loaded current team from API:', this.currentTeam);
                 await this.loadAgents();
             }
         } catch (error) {
-            console.error('[AgentSelector] Failed to load current team:', error);
+            console.error('Failed to load current team:', error);
         }
     }
 
@@ -99,18 +84,15 @@ class AgentSelector extends HTMLElement {
     async loadAgents() {
         // Don't load agents if we don't know the current team yet
         if (!this.currentTeam) {
-            console.log('[AgentSelector] Skipping loadAgents - no team set yet');
             return;
         }
 
         // Prevent duplicate loads
         if (this._isLoading) {
-            console.log('[AgentSelector] Already loading, skipping duplicate request');
             return;
         }
 
         this._isLoading = true;
-        console.log('[AgentSelector] Loading agents for team:', this.currentTeam);
 
         try {
             const response = await fetch('/api/v1/agents', {
@@ -122,14 +104,10 @@ class AgentSelector extends HTMLElement {
                 // API returns wrapped response: { success: true, data: [...] }
                 const allAgents = apiResponse.data || [];
 
-                console.log('[AgentSelector] Received', allAgents.length, 'total agents');
-
                 // Filter agents to only show those from the current team
                 this.agents = allAgents.filter(agent =>
                     agent.teamName === this.currentTeam
                 );
-
-                console.log('[AgentSelector] Filtered to', this.agents.length, 'agents for team:', this.currentTeam);
 
                 await this.loadCurrentAgent();
                 this.renderAgents();
@@ -152,8 +130,6 @@ class AgentSelector extends HTMLElement {
                 // API returns wrapped response: { success: true, data: {...} }
                 const newAgent = apiResponse.data.name;
 
-                console.log('[AgentSelector] Current agent from API:', newAgent);
-
                 // Only dispatch event if agent actually changed
                 if (newAgent !== this.currentAgent) {
                     this.currentAgent = newAgent;
@@ -161,14 +137,11 @@ class AgentSelector extends HTMLElement {
                     window.dispatchEvent(new CustomEvent('agent-changed', {
                         detail: this.currentAgent
                     }));
-                    console.log('[AgentSelector] Dispatched agent-changed event for:', this.currentAgent);
                 }
             } else if (response.status === 204) {
                 // No current agent selected - select first agent from the list if available
-                console.log('[AgentSelector] No current agent (204), selecting first available agent');
                 if (this.agents.length > 0 && this.currentAgent === null) {
                     const firstAgent = this.agents[0].name;
-                    console.log('[AgentSelector] Auto-selecting first agent:', firstAgent);
                     // Don't call selectAgent() to avoid API call, just set it locally and dispatch event
                     this.currentAgent = firstAgent;
                     window.dispatchEvent(new CustomEvent('agent-changed', {
@@ -218,8 +191,6 @@ class AgentSelector extends HTMLElement {
 
         listContainer.innerHTML = this.agents.map(agent => {
             const isActive = agent.name === this.currentAgent || agent.isCurrentAgent;
-            // Debug: log the actual status value and full agent object
-            console.log(`Agent: ${agent.name}, Full agent object:`, agent);
             const statusIcon = (agent.status && agent.status.toLowerCase() === 'active') ? '🟢' : '🔴';
             const colorClass = this.getAgentColorClass(agent.name);
 
@@ -241,6 +212,12 @@ class AgentSelector extends HTMLElement {
                         </div>
                         <div class="agent-controls">
                             <div class="agent-status-indicator">${statusIcon}</div>
+                            <button class="btn-icon-small" onclick="event.stopPropagation(); agentSelector.cloneAgent('${agent.name}')" title="Clone to Team">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                                </svg>
+                            </button>
                             <button class="btn-icon-small" onclick="event.stopPropagation(); agentSelector.editAgent('${agent.name}')" title="Edit">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
@@ -307,6 +284,7 @@ class AgentSelector extends HTMLElement {
             });
 
             if (response.ok) {
+                console.log('Agent switched to:', agentName);
                 showToast(`Switched to agent: ${agentName}`);
             } else {
                 // Rollback on failure
@@ -327,6 +305,11 @@ class AgentSelector extends HTMLElement {
             }));
             showToast('Failed to switch agent', 'error');
         }
+    }
+
+    async cloneAgent(agentName) {
+        // Show clone agent modal
+        showCloneAgentModal(agentName, this.currentTeam);
     }
 
     async editAgent(agentName) {

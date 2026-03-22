@@ -681,7 +681,7 @@ class ChatComponent extends HTMLElement {
         switch (collabMsg.type) {
             case 'tool_call':
                 messageHTML = `
-                    <div class="message message-collaboration message-tool-call">
+                    <div class="message message-collaboration message-tool-call" data-timestamp="${collabMsg.timestamp}">
                         <div class="message-avatar">🔧</div>
                         <div class="message-bubble">
                             <div class="message-header">
@@ -700,7 +700,7 @@ class ChatComponent extends HTMLElement {
                 const statusIcon = collabMsg.success ? '✓' : '✗';
                 const statusClass = collabMsg.success ? 'success' : 'error';
                 messageHTML = `
-                    <div class="message message-collaboration message-tool-result ${statusClass}">
+                    <div class="message message-collaboration message-tool-result ${statusClass}" data-timestamp="${collabMsg.timestamp}">
                         <div class="message-avatar">${statusIcon}</div>
                         <div class="message-bubble">
                             <div class="message-header">
@@ -717,7 +717,7 @@ class ChatComponent extends HTMLElement {
 
             case 'agent_communication':
                 messageHTML = `
-                    <div class="message message-collaboration message-agent-comm">
+                    <div class="message message-collaboration message-agent-comm" data-timestamp="${collabMsg.timestamp}">
                         <div class="message-avatar">🔄</div>
                         <div class="message-bubble">
                             <div class="message-header">
@@ -734,7 +734,7 @@ class ChatComponent extends HTMLElement {
 
             case 'agent_response':
                 messageHTML = `
-                    <div class="message message-collaboration message-agent-response">
+                    <div class="message message-collaboration message-agent-response" data-timestamp="${collabMsg.timestamp}">
                         <div class="message-avatar">📥</div>
                         <div class="message-bubble">
                             <div class="message-header">
@@ -751,14 +751,47 @@ class ChatComponent extends HTMLElement {
         }
 
         if (messageHTML) {
-            messagesContainer.insertAdjacentHTML('beforeend', messageHTML);
+            // Insert in chronological order based on timestamp
+            const newTimestamp = new Date(collabMsg.timestamp).getTime();
+            const allMessages = Array.from(messagesContainer.querySelectorAll('.message:not(.message-waiting)'));
+
+            let insertPosition = null;
+
+            // Find the correct position based on timestamp (iterate forward for ascending order)
+            for (let i = 0; i < allMessages.length; i++) {
+                const existingMsg = allMessages[i];
+                const existingTimestamp = this.parseMessageTimestamp(existingMsg);
+
+                if (existingTimestamp && newTimestamp < existingTimestamp) {
+                    // New message is older, insert before this message
+                    insertPosition = existingMsg;
+                    break;
+                }
+            }
+
+            if (insertPosition) {
+                // Insert before the found position (this message is newer than our message)
+                insertPosition.insertAdjacentHTML('beforebegin', messageHTML);
+            } else {
+                // Message is newest, append at the end (before waiting indicators)
+                const firstWaiting = messagesContainer.querySelector('.message-waiting');
+                if (firstWaiting) {
+                    firstWaiting.insertAdjacentHTML('beforebegin', messageHTML);
+                } else {
+                    messagesContainer.insertAdjacentHTML('beforeend', messageHTML);
+                }
+            }
 
             // Force reflow
             void messagesContainer.offsetHeight;
 
-            // Highlight code blocks if any
-            const newMessage = messagesContainer.lastElementChild;
-            this.highlightCode(newMessage);
+            // Highlight code blocks if any - find the newly added message
+            const newMessage = Array.from(messagesContainer.querySelectorAll('.message')).find(
+                msg => msg.getAttribute('data-timestamp') === collabMsg.timestamp
+            );
+            if (newMessage) {
+                this.highlightCode(newMessage);
+            }
 
             // Scroll to bottom
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -810,19 +843,37 @@ class ChatComponent extends HTMLElement {
         if (msg.attachments && msg.attachments.length > 0) {
             attachmentsHTML = `
                 <div class="message-attachments">
-                    ${msg.attachments.map(att => `
-                        <div class="attachment-item">
-                            <span class="attachment-icon">${this.getFileIcon(att.mimeType)}</span>
-                            <span class="attachment-name">${att.filename}</span>
-                            <span class="attachment-size">${this.formatFileSize(att.fileSize)}</span>
-                        </div>
-                    `).join('')}
+                    ${msg.attachments.map(att => {
+                        // Check if attachment is an image with base64 data
+                        if (att.mimeType && att.mimeType.startsWith('image/') && att.contentBase64) {
+                            // Display actual image for assistant responses with generated images
+                            return `
+                                <div class="attachment-image">
+                                    <img src="data:${att.mimeType};base64,${att.contentBase64}"
+                                         alt="${att.filename || 'Generated image'}"
+                                         loading="lazy"
+                                         onclick="window.open(this.src, '_blank')"
+                                         style="max-width: 100%; height: auto; cursor: pointer; border-radius: 8px; margin-top: 8px;" />
+                                    ${att.filename ? `<div class="attachment-filename" style="margin-top: 4px; font-size: 0.85em; opacity: 0.7;">${att.filename}</div>` : ''}
+                                </div>
+                            `;
+                        } else {
+                            // Display file icon for other attachments
+                            return `
+                                <div class="attachment-item">
+                                    <span class="attachment-icon">${this.getFileIcon(att.mimeType)}</span>
+                                    <span class="attachment-name">${att.filename}</span>
+                                    <span class="attachment-size">${this.formatFileSize(att.fileSize)}</span>
+                                </div>
+                            `;
+                        }
+                    }).join('')}
                 </div>
             `;
         }
 
         const messageHTML = `
-            <div class="message ${isUser ? 'message-user' : 'message-assistant'} ${colorClass}" data-message-id="${messageId}" data-agent="${isUser ? '' : agentName}">
+            <div class="message ${isUser ? 'message-user' : 'message-assistant'} ${colorClass}" data-message-id="${messageId}" data-agent="${isUser ? '' : agentName}" data-timestamp="${msg.timestamp}">
                 <div class="message-avatar">
                     ${isUser ? '👤' : '🤖'}
                 </div>
@@ -840,17 +891,73 @@ class ChatComponent extends HTMLElement {
             </div>
         `;
 
-        messagesContainer.insertAdjacentHTML('beforeend', messageHTML);
+        // Insert message in chronological order based on timestamp
+        const newTimestamp = new Date(msg.timestamp).getTime();
+        const allMessages = Array.from(messagesContainer.querySelectorAll('.message:not(.message-waiting)'));
+
+        let insertPosition = null;
+
+        // Find the correct position based on timestamp (iterate forward for ascending order)
+        for (let i = 0; i < allMessages.length; i++) {
+            const existingMsg = allMessages[i];
+            const existingTimestamp = this.parseMessageTimestamp(existingMsg);
+
+            if (existingTimestamp && newTimestamp < existingTimestamp) {
+                // New message is older, insert before this message
+                insertPosition = existingMsg;
+                break;
+            }
+        }
+
+        if (insertPosition) {
+            // Insert before the found position (this message is newer than our message)
+            insertPosition.insertAdjacentHTML('beforebegin', messageHTML);
+        } else {
+            // Message is newest, append at the end (before waiting indicators)
+            const firstWaiting = messagesContainer.querySelector('.message-waiting');
+            if (firstWaiting) {
+                firstWaiting.insertAdjacentHTML('beforebegin', messageHTML);
+            } else {
+                messagesContainer.insertAdjacentHTML('beforeend', messageHTML);
+            }
+        }
 
         // Force reflow to ensure rendering
         void messagesContainer.offsetHeight;
 
-        // Highlight code blocks
-        const newMessage = messagesContainer.lastElementChild;
-        this.highlightCode(newMessage);
+        // Highlight code blocks - find the newly added message
+        const newMessage = messagesContainer.querySelector(`[data-message-id="${messageId}"]`);
+        if (newMessage) {
+            this.highlightCode(newMessage);
+        }
 
         // Scroll to bottom
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+
+    parseMessageTimestamp(messageElement) {
+        // Try to get timestamp from data attribute if available
+        const timestamp = messageElement.getAttribute('data-timestamp');
+        if (timestamp) {
+            return new Date(timestamp).getTime();
+        }
+
+        // Fallback: try to parse from the time display
+        const timeElement = messageElement.querySelector('.message-time');
+        if (timeElement) {
+            const timeText = timeElement.textContent;
+            // This is a time string like "2:30:45 PM", we need the full date
+            // For now, assume today's date
+            const today = new Date();
+            const datePart = today.toDateString();
+            try {
+                return new Date(datePart + ' ' + timeText).getTime();
+            } catch (e) {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     appendToMessage(messageId, chunk) {
@@ -881,6 +988,12 @@ class ChatComponent extends HTMLElement {
             message.modelUsed = data.modelUsed;
         }
 
+        // Add attachments if present (e.g., generated images)
+        if (data.attachments && data.attachments.length > 0) {
+            message.attachments = data.attachments;
+            console.log('📎 Added', data.attachments.length, 'attachment(s) to message');
+        }
+
         // Update the message content one last time
         this.updateMessage(messageId);
 
@@ -907,18 +1020,70 @@ class ChatComponent extends HTMLElement {
         const messageElement = this.querySelector(`[data-message-id="${messageId}"]`);
         if (messageElement) {
             const message = this.messages.find(m => m.id === messageId);
+            if (!message) return;
+
+            // Update content
             const contentDiv = messageElement.querySelector('.message-content');
-            if (contentDiv && message) {
+            if (contentDiv) {
                 contentDiv.innerHTML = this.renderMarkdown(message.content);
                 void contentDiv.offsetHeight;
                 this.highlightCode(contentDiv);
-
-                // Scroll to bottom
-                const messagesContainer = this.querySelector('#chatMessages');
-                requestAnimationFrame(() => {
-                    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-                });
             }
+
+            // Update or add attachments if present
+            if (message.attachments && message.attachments.length > 0) {
+                // Check if attachments container already exists
+                let attachmentsContainer = messageElement.querySelector('.message-attachments');
+
+                if (!attachmentsContainer) {
+                    // Create attachments container before content
+                    const messageBubble = messageElement.querySelector('.message-bubble');
+                    const messageHeader = messageBubble.querySelector('.message-header');
+
+                    attachmentsContainer = document.createElement('div');
+                    attachmentsContainer.className = 'message-attachments';
+
+                    // Insert after header, before content
+                    if (messageHeader && messageHeader.nextSibling) {
+                        messageBubble.insertBefore(attachmentsContainer, messageHeader.nextSibling);
+                    }
+                }
+
+                // Render attachments
+                if (attachmentsContainer) {
+                    attachmentsContainer.innerHTML = message.attachments.map(att => {
+                        // Check if attachment is an image with base64 data
+                        if (att.mimeType && att.mimeType.startsWith('image/') && att.contentBase64) {
+                            // Display actual image
+                            return `
+                                <div class="attachment-image">
+                                    <img src="data:${att.mimeType};base64,${att.contentBase64}"
+                                         alt="${att.filename || 'Generated image'}"
+                                         loading="lazy"
+                                         onclick="window.open(this.src, '_blank')"
+                                         style="max-width: 100%; height: auto; cursor: pointer; border-radius: 8px; margin-top: 8px;" />
+                                    ${att.filename ? `<div class="attachment-filename" style="margin-top: 4px; font-size: 0.85em; opacity: 0.7;">${att.filename}</div>` : ''}
+                                </div>
+                            `;
+                        } else {
+                            // Display file icon for other attachments
+                            return `
+                                <div class="attachment-item">
+                                    <span class="attachment-icon">${this.getFileIcon(att.mimeType)}</span>
+                                    <span class="attachment-name">${att.filename}</span>
+                                    <span class="attachment-size">${this.formatFileSize(att.fileSize)}</span>
+                                </div>
+                            `;
+                        }
+                    }).join('');
+                }
+            }
+
+            // Scroll to bottom
+            const messagesContainer = this.querySelector('#chatMessages');
+            requestAnimationFrame(() => {
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            });
         }
     }
 
@@ -962,8 +1127,14 @@ class ChatComponent extends HTMLElement {
         }
 
         // Save collaboration messages and waiting indicators before clearing
-        const collaborationMessages = Array.from(messagesContainer.querySelectorAll('.message-collaboration, .message-waiting'));
-        const savedCollabHTML = collaborationMessages.map(el => el.outerHTML);
+        const collaborationMessages = Array.from(messagesContainer.querySelectorAll('.message-collaboration'));
+        const waitingIndicators = Array.from(messagesContainer.querySelectorAll('.message-waiting'));
+
+        // Extract collaboration message data with timestamps for sorting
+        const collabData = collaborationMessages.map(el => ({
+            html: el.outerHTML,
+            timestamp: el.getAttribute('data-timestamp')
+        }));
 
         const messagesHTML = this.messages.map(msg => {
             const timestamp = new Date(msg.timestamp).toLocaleTimeString();
@@ -985,32 +1156,81 @@ class ChatComponent extends HTMLElement {
                 `;
             }
 
-            return `
-                <div class="message ${isUser ? 'message-user' : 'message-assistant'} ${colorClass}" data-message-id="${messageId}" data-agent="${isUser ? '' : agentName}">
-                    <div class="message-avatar">
-                        ${isUser ? '👤' : '🤖'}
+            // Build attachments HTML if present
+            let attachmentsHTML = '';
+            if (msg.attachments && msg.attachments.length > 0) {
+                attachmentsHTML = `
+                    <div class="message-attachments">
+                        ${msg.attachments.map(att => {
+                            // Check if attachment is an image with base64 data
+                            if (att.mimeType && att.mimeType.startsWith('image/') && att.contentBase64) {
+                                // Display actual image for assistant responses with generated images
+                                return `
+                                    <div class="attachment-image">
+                                        <img src="data:${att.mimeType};base64,${att.contentBase64}"
+                                             alt="${att.filename || 'Generated image'}"
+                                             loading="lazy"
+                                             onclick="window.open(this.src, '_blank')"
+                                             style="max-width: 100%; height: auto; cursor: pointer; border-radius: 8px; margin-top: 8px;" />
+                                        ${att.filename ? `<div class="attachment-filename" style="margin-top: 4px; font-size: 0.85em; opacity: 0.7;">${att.filename}</div>` : ''}
+                                    </div>
+                                `;
+                            } else {
+                                // Display file icon for other attachments
+                                return `
+                                    <div class="attachment-item">
+                                        <span class="attachment-icon">${this.getFileIcon(att.mimeType)}</span>
+                                        <span class="attachment-name">${att.filename}</span>
+                                        <span class="attachment-size">${this.formatFileSize(att.fileSize)}</span>
+                                    </div>
+                                `;
+                            }
+                        }).join('')}
                     </div>
-                    <div class="message-bubble">
-                        <div class="message-header">
-                            <span class="message-role">${isUser ? 'You' : agentName}</span>
-                            <span class="message-time">${timestamp}</span>
+                `;
+            }
+
+            return {
+                html: `
+                    <div class="message ${isUser ? 'message-user' : 'message-assistant'} ${colorClass}" data-message-id="${messageId}" data-agent="${isUser ? '' : agentName}" data-timestamp="${msg.timestamp}">
+                        <div class="message-avatar">
+                            ${isUser ? '👤' : '🤖'}
                         </div>
-                        <div class="message-content">
-                            ${this.renderMarkdown(msg.content)}
+                        <div class="message-bubble">
+                            <div class="message-header">
+                                <span class="message-role">${isUser ? 'You' : agentName}</span>
+                                <span class="message-time">${timestamp}</span>
+                            </div>
+                            ${attachmentsHTML}
+                            <div class="message-content">
+                                ${this.renderMarkdown(msg.content)}
+                            </div>
+                            ${metadata}
+                            ${msg.streaming ? '<div class="streaming-indicator"><span></span><span></span><span></span></div>' : ''}
                         </div>
-                        ${metadata}
-                        ${msg.streaming ? '<div class="streaming-indicator"><span></span><span></span><span></span></div>' : ''}
                     </div>
-                </div>
-            `;
-        }).join('');
+                `,
+                timestamp: msg.timestamp
+            };
+        });
 
-        messagesContainer.innerHTML = messagesHTML;
+        // Merge conversation and collaboration messages, sorted by timestamp (ascending - oldest first)
+        const allMessages = [...messagesHTML, ...collabData]
+            .filter(m => m.timestamp) // Filter out any without timestamps
+            .sort((a, b) => {
+                const timeA = new Date(a.timestamp).getTime();
+                const timeB = new Date(b.timestamp).getTime();
+                // Ascending: oldest messages first (top of chat), newest last (bottom of chat)
+                return timeA - timeB;
+            });
 
-        // Restore collaboration messages and waiting indicators
-        if (savedCollabHTML.length > 0) {
-            savedCollabHTML.forEach(html => {
-                messagesContainer.insertAdjacentHTML('beforeend', html);
+        // Render all messages in chronological order
+        messagesContainer.innerHTML = allMessages.map(m => m.html).join('');
+
+        // Restore waiting indicators at the end (they don't have timestamps)
+        if (waitingIndicators.length > 0) {
+            waitingIndicators.forEach(el => {
+                messagesContainer.insertAdjacentHTML('beforeend', el.outerHTML);
             });
         }
 

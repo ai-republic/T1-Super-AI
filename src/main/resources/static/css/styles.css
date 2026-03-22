@@ -1644,16 +1644,24 @@ body {
 }
 
 .provider-section {
-    margin-bottom: 12px;
-    padding: 10px;
+    margin-bottom: 16px;
+    padding: 16px;
+    background: var(--bg-secondary);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     transition: all var(--transition-fast);
 }
 
 .provider-section:hover {
     border-color: var(--primary-color);
     background: var(--bg-elevated);
+}
+
+.provider-section h4 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-primary);
 }
 
 .provider-config-section {
@@ -1772,9 +1780,20 @@ body {
 }
 
 .task-model-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.task-model-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
+}
+
+.task-model-row-full {
+    display: flex;
+    width: 100%;
 }
 
 .task-model-controls select,
@@ -1846,9 +1865,20 @@ body {
 }
 
 .config-editor .task-model-controls {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-sm);
+}
+
+.config-editor .task-model-row {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--spacing-sm);
+}
+
+.config-editor .task-model-row-full {
+    display: flex;
+    width: 100%;
 }
 
 .config-editor .task-model-controls select,

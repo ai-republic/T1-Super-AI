@@ -37,6 +37,12 @@ class TeamSelector extends HTMLElement {
                         <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
                     </svg>
                 </button>
+                <button class="btn-icon-small" onclick="window.teamSelector.showAddTeamModal()" title="Add Team">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                </button>
             </div>
         `;
 
@@ -45,38 +51,29 @@ class TeamSelector extends HTMLElement {
     }
 
     async loadTeams() {
-        console.log('[TeamSelector] loadTeams() called');
         try {
             const response = await fetch('/api/v1/teams', {
                 headers: getAuthHeaders()
             });
 
-            console.log('[TeamSelector] Teams API response status:', response.status);
-
             if (response.ok) {
                 const apiResponse = await response.json();
                 this.teams = apiResponse.data || [];
-                console.log('[TeamSelector] Loaded teams:', this.teams);
 
                 await this.loadCurrentTeam();
-                console.log('[TeamSelector] Current team:', this.currentTeam);
 
                 this.renderTeams();
 
                 // Dispatch team-changed event on initial load so agent selector loads agents
                 if (this.currentTeam) {
-                    console.log('[TeamSelector] *** DISPATCHING team-changed event for:', this.currentTeam, '***');
                     const event = new CustomEvent('team-changed', {
                         detail: this.currentTeam
                     });
                     window.dispatchEvent(event);
-                    console.log('[TeamSelector] Event dispatched successfully');
-                } else {
-                    console.warn('[TeamSelector] No current team to dispatch!');
                 }
             }
         } catch (error) {
-            console.error('[TeamSelector] Failed to load teams:', error);
+            console.error('Failed to load teams:', error);
             this.showError();
         }
     }
@@ -146,7 +143,7 @@ class TeamSelector extends HTMLElement {
                     detail: teamName
                 }));
 
-                console.log('Switched to team:', teamName);
+                console.log('Team switched to:', teamName);
             } else {
                 console.error('Failed to switch team');
                 // Revert selection
@@ -156,6 +153,20 @@ class TeamSelector extends HTMLElement {
             console.error('Failed to switch team:', error);
             // Revert selection
             this.renderTeams();
+        }
+    }
+
+    showAddTeamModal() {
+        const modal = document.getElementById('addTeamModal');
+        if (modal) {
+            modal.classList.add('active');
+            // Clear the input field
+            const input = document.getElementById('newTeamNameInput');
+            if (input) {
+                input.value = '';
+                // Focus the input after a short delay to ensure modal is visible
+                setTimeout(() => input.focus(), 100);
+            }
         }
     }
 

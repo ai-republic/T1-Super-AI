@@ -3,6 +3,7 @@ class CharacterEditor extends HTMLElement {
         super();
         this.agentDetails = null;
         this.configForm = null;
+        this.originalAgentName = null; // Store original name for rename detection
     }
 
     connectedCallback() {
@@ -13,7 +14,7 @@ class CharacterEditor extends HTMLElement {
         this.innerHTML = `
             <div class="character-editor">
                 <form id="characterForm">
-                    <agent-config-form mode="edit" read-only-name="true"></agent-config-form>
+                    <agent-config-form mode="edit"></agent-config-form>
 
                     <div class="form-actions">
                         <button type="button" class="btn btn-secondary" onclick="closeCharacterModal()">Cancel</button>
@@ -43,6 +44,7 @@ class CharacterEditor extends HTMLElement {
 
     async loadAgent(agentDetails) {
         this.agentDetails = agentDetails;
+        this.originalAgentName = agentDetails.name; // Store original name
         this.populateForm();
     }
 
@@ -65,6 +67,7 @@ class CharacterEditor extends HTMLElement {
                     const detailsApiResponse = await detailsResponse.json();
                     // API returns wrapped response: { success: true, data: {...} }
                     this.agentDetails = detailsApiResponse.data;
+                    this.originalAgentName = this.agentDetails.name; // Store original name
                     this.populateForm();
                 }
             } else if (response.status === 204) {
@@ -100,9 +103,12 @@ class CharacterEditor extends HTMLElement {
         }
 
         const agentData = this.configForm.getData();
-        const agentName = agentData.name;
+        const newAgentName = agentData.name;
 
-        // Prepare update data (name is excluded from updates)
+        // Check if name was changed
+        const nameChanged = this.originalAgentName !== newAgentName;
+
+        // Prepare update data
         const updateData = {
             role: agentData.role,
             purpose: agentData.purpose,
@@ -115,8 +121,14 @@ class CharacterEditor extends HTMLElement {
             guidelines: agentData.guidelines
         };
 
+        // Add newName if the name was changed
+        if (nameChanged) {
+            updateData.newName = newAgentName;
+        }
+
         try {
-            const response = await fetch(`/api/v1/agents/${agentName}`, {
+            // Use original name in the URL since that's the current agent name
+            const response = await fetch(`/api/v1/agents/${this.originalAgentName}`, {
                 method: 'PUT',
                 headers: {
                     ...getAuthHeaders(),
@@ -126,7 +138,11 @@ class CharacterEditor extends HTMLElement {
             });
 
             if (response.ok) {
-                showToast('Character profile updated successfully');
+                if (nameChanged) {
+                    showToast(`Character profile updated and agent renamed to '${newAgentName}'`);
+                } else {
+                    showToast('Character profile updated successfully');
+                }
                 closeCharacterModal();
 
                 // Refresh agent list
