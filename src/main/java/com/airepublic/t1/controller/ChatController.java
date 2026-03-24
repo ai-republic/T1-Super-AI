@@ -13,6 +13,7 @@ import com.airepublic.t1.service.MemoryManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -43,6 +44,9 @@ public class ChatController {
 
     @Autowired(required = false)
     private MemoryManager memoryManager;
+
+    @Value("${spring.mvc.async.request-timeout:1800000}")
+    private Long asyncRequestTimeout;
 
     @PostMapping
     public ResponseEntity<ApiResponse<ChatResponse>> sendMessage(@RequestBody ChatRequest request) {
@@ -189,7 +193,8 @@ public class ChatController {
                                    @RequestParam(required = false) String agentName,
                                    @RequestParam(required = false) String panelId) {
         log.debug("SSE stream request for message: {}", message.substring(0, Math.min(50, message.length())));
-        SseEmitter emitter = new SseEmitter(300000L); // 5 minute timeout
+        // Use configurable timeout from application.properties (default 30 minutes)
+        SseEmitter emitter = new SseEmitter(asyncRequestTimeout);
 
         // Capture request parameters
         final String requestAgentName = (agentName != null && !agentName.isEmpty())

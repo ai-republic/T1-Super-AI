@@ -8,6 +8,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 
 import java.util.stream.Collectors;
 
@@ -41,6 +42,16 @@ public class GlobalExceptionHandler {
         log.error("Validation error: {}", errors);
         return ResponseEntity.badRequest()
                 .body(ApiResponse.error("Validation failed: " + errors));
+    }
+
+    @ExceptionHandler(AsyncRequestTimeoutException.class)
+    public ResponseEntity<String> handleAsyncRequestTimeout(
+            AsyncRequestTimeoutException ex, WebRequest request) {
+        log.error("Async request timeout - task took too long to complete");
+        // For SSE requests, we cannot send a proper response after timeout
+        // The client should handle timeout on their side
+        // Return empty response with 503 status
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
     }
 
     @ExceptionHandler(Exception.class)

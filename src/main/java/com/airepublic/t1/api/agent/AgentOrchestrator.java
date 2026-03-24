@@ -68,7 +68,7 @@ public class AgentOrchestrator {
 
     private boolean autoModelSelectionEnabled = true; // Default enabled
 
-    private static final int MAX_TOOL_ITERATIONS = 10;
+    private static final int MAX_TOOL_ITERATIONS = 100;
     private String currentModelInfo = null; // Store current model being used
 
     // CRITICAL: ThreadLocal storage for complete agent isolation
